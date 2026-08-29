@@ -557,7 +557,32 @@ function filaStock(r = {}) {
 function renderStock() {
   const tbody = document.querySelector('#tabla-stock tbody');
   tbody.innerHTML = '';
-  stockFilas.forEach((r) => tbody.appendChild(filaStock(r)));
+  const ordenado = [...stockFilas].sort((a, b) =>
+    String(a.insumo || '').localeCompare(String(b.insumo || ''), 'es', { sensitivity: 'base' })
+  );
+  ordenado.forEach((r) => tbody.appendChild(filaStock(r)));
+}
+
+// Relee lo que hay ahora mismo en la tabla (sin filtrar filas vacías, para
+// no perder una fila que el usuario recién está llenando) y la vuelve a
+// pintar ordenada alfabéticamente por insumo.
+function ordenarTablaStock() {
+  const filas = [...document.querySelectorAll('#tabla-stock tbody tr')];
+  const datos = filas.map((tr) => {
+    const obj = {};
+    tr.querySelectorAll('input').forEach((input) => {
+      if (input.dataset.field === 'tamanoEnvaseTexto') {
+        obj.tamanoEnvaseTexto = input.value;
+      } else {
+        obj[input.dataset.field] = input.value;
+      }
+    });
+    return obj;
+  });
+  datos.sort((a, b) => String(a.insumo || '').localeCompare(String(b.insumo || ''), 'es', { sensitivity: 'base' }));
+  const tbody = document.querySelector('#tabla-stock tbody');
+  tbody.innerHTML = '';
+  datos.forEach((d) => tbody.appendChild(filaStock(d)));
 }
 
 document.getElementById('btn-add-stock').addEventListener('click', () => {
