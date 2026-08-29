@@ -91,17 +91,22 @@ exports.handler = async (event) => {
     const stockPorInsumo = new Map((stock || []).map((s) => [s.insumo, s]));
 
     const detalle = [];
-    for (const [insumo, necesidad] of necesidadPorInsumo.entries()) {
+    for (const [insumo, necesidadUnidadReceta] of necesidadPorInsumo.entries()) {
       const s = stockPorInsumo.get(insumo);
+      const tamanoEnvase = s && s.tamanoEnvase > 0 ? s.tamanoEnvase : 1;
+      const necesidadEnvases = necesidadUnidadReceta / tamanoEnvase;
+
       const stockActual = s ? s.stockActual : 0;
       const stockMinimo = s ? s.stockMinimo : 0;
-      const stockProyectado = round2(stockActual - necesidad);
+      const stockProyectado = round2(stockActual - necesidadEnvases);
       const bajoMinimo = stockProyectado < stockMinimo;
       const sugeridoPedir = bajoMinimo ? Math.ceil(stockMinimo - stockProyectado) : 0;
 
       detalle.push({
         insumo,
-        necesidadHoy: round2(necesidad),
+        tamanoEnvase,
+        necesidadHoyUnidadReceta: round2(necesidadUnidadReceta),
+        necesidadHoyEnvases: round2(necesidadEnvases),
         stockActual,
         stockMinimo,
         stockProyectadoFinDia: stockProyectado,
