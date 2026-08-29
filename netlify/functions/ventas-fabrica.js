@@ -423,6 +423,24 @@ function qtyProductoTotalDia(dia, nombreProducto) {
 // HELPERS (idénticos a sales-analytics.js / lookup-receipt.js)
 // ============================================================
 
+// Toteat manda algunos textos con acentos "rotos" (ej: "MaracuyÃ¡" en vez
+// de "Maracuyá", "CafÃ©" en vez de "Café"). Es un problema clásico de
+// doble-codificación: el texto en UTF-8 se leyó una vez como si fuera
+// Latin-1 y se volvió a guardar en UTF-8 encima. Se revierte
+// reinterpretando los bytes al revés. Si el texto ya viene bien, esta
+// función no le hace nada (es segura de aplicar siempre).
+function arreglarAcentos(str) {
+  if (!str) return str;
+  try {
+    if (/Ã[\x80-\xBF]|Â[\x80-\xBF]/.test(str)) {
+      return Buffer.from(str, 'latin1').toString('utf8');
+    }
+  } catch (e) {
+    // si algo sale mal, mejor devolver el texto original que romper todo
+  }
+  return str;
+}
+
 // Junta cada modificador/variante (ej: sabor de tartaleta, "Sin Lactosa" de
 // un café) con su producto padre. Toteat NO manda el modificador con un
 // guion "-" al principio del nombre (como se asumía antes) -- lo manda como
@@ -441,14 +459,14 @@ function mergeModifiers(rawProducts) {
 
     if (esModificador) {
       const idxPadre = indexPorLineId.get(p.lineReference);
-      const modText = String(p.name || '').trim();
+      const modText = arreglarAcentos(String(p.name || '').trim());
       if (idxPadre != null && modText) {
         merged[idxPadre].name = merged[idxPadre].name + ' (' + modText + ')';
       }
       continue;
     }
 
-    const rawName = String(p.name || '').trim();
+    const rawName = arreglarAcentos(String(p.name || '').trim());
     merged.push(Object.assign({}, p, { name: rawName }));
     if (p.lineId != null) indexPorLineId.set(p.lineId, merged.length - 1);
   }
@@ -459,7 +477,7 @@ function mergeModifiers(rawProducts) {
 // -- pendiente de confirmar el campo exacto con ?debug=raw contra una venta real.
 function getCategoryName(p) {
   const candidate = p.hierarchyName || p.hierarchy || p.categoryName || p.category || p.familyName || p.groupName;
-  return candidate ? String(candidate) : 'Sin categoría';
+  return candidate ? arreglarAcentos(String(candidate)) : 'Sin categoría';
 }
 
 // El monto que cuenta es el consumo, sin propina.
