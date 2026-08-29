@@ -28,13 +28,13 @@ exports.handler = async (event) => {
     for (const p of resumen.products || []) {
       const cat = p.category || 'Sin categoría';
       if (!porCategoria.has(cat)) porCategoria.set(cat, []);
-      porCategoria.get(cat).push({ producto: p.name, unidadesVendidas: p.quantity });
+      porCategoria.get(cat).push({ producto: p.name, unidadesVendidas: p.quantity, ventaTotal: p.revenue });
     }
 
     const categorias = [...porCategoria.entries()]
       .map(([categoria, productos]) => ({
         categoria,
-        productos: productos.sort((a, b) => b.unidadesVendidas - a.unidadesVendidas),
+        productos: productos.sort((a, b) => b.ventaTotal - a.ventaTotal),
       }))
       .sort((a, b) => a.categoria.localeCompare(b.categoria));
 
