@@ -26,52 +26,57 @@ exports.handler = async (event) => {
 
   const conSabor = [];
   const sinSabor = [];
+  const diasConError = [];
 
-  try {
-    for (const fecha of fechas) {
-      const sales = await fetchToteatDia(fecha, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU });
+  for (const fecha of fechas) {
+    let sales;
+    try {
+      sales = await fetchToteatDia(fecha, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU });
+      await esperar(300); // pequeña pausa entre días para no gatillar el rate limit de Toteat
+    } catch (e) {
+      diasConError.push(fecha);
+      continue;
+    }
 
-      for (const sale of sales) {
-        const productos = sale.products || [];
-        // líneas principales (no son variante de otra) cuyo nombre calza con "producto"
-        const lineasProducto = productos.filter(
-          (p) => (p.lineReference == null || Number(p.lineReference) === 0) &&
-                 String(p.name || '').trim().toLowerCase() === producto
+    for (const sale of sales) {
+      const productos = sale.products || [];
+      // líneas principales (no son variante de otra) cuyo nombre calza con "producto"
+      const lineasProducto = productos.filter(
+        (p) => (p.lineReference == null || Number(p.lineReference) === 0) &&
+               String(p.name || '').trim().toLowerCase() === producto
+      );
+
+      for (const linea of lineasProducto) {
+        const variante = productos.find(
+          (p) => p.lineReference != null && Number(p.lineReference) === Number(linea.lineId)
         );
-
-        for (const linea of lineasProducto) {
-          const variante = productos.find(
-            (p) => p.lineReference != null && Number(p.lineReference) === Number(linea.lineId)
-          );
-          const entrada = {
-            fecha: sale.dateClosed,
-            precio: linea.payed,
-          };
-          if (variante) {
-            entrada.sabor = variante.name;
-            conSabor.push(entrada);
-          } else {
-            sinSabor.push(entrada);
-          }
+        const entrada = {
+          fecha: sale.dateClosed,
+          precio: linea.payed,
+        };
+        if (variante) {
+          entrada.sabor = variante.name;
+          conSabor.push(entrada);
+        } else {
+          sinSabor.push(entrada);
         }
       }
     }
-
-    return jsonResponse(200, {
-      ok: true,
-      producto: qs.producto || 'Tartaleta',
-      rangoDias: dias,
-      totalConSabor: conSabor.length,
-      totalSinSabor: sinSabor.length,
-      ventasSinSabor: sinSabor,
-      ejemploConSabor: conSabor.slice(0, 5),
-    });
-  } catch (e) {
-    return jsonResponse(502, { ok: false, error: 'No se pudo conectar con Toteat.', detail: String(e) });
   }
+
+  return jsonResponse(200, {
+    ok: true,
+    producto: qs.producto || 'Tartaleta',
+    rangoDias: dias,
+    totalConSabor: conSabor.length,
+    totalSinSabor: sinSabor.length,
+    ventasSinSabor: sinSabor,
+    ejemploConSabor: conSabor.slice(0, 5),
+    diasConError: diasConError.length ? diasConError : undefined,
+  });
 };
 
-async function fetchToteatDia(fechaYYYYMMDD, creds) {
+async function fetchToteatDia(fechaYYYYMMDD, creds, intentos = 3) {
   const url = new URL('https://api.toteat.com/mw/or/1.0/sales');
   url.searchParams.set('xir', creds.TOTEAT_XIR);
   url.searchParams.set('xil', creds.TOTEAT_XIL);
@@ -80,10 +85,24 @@ async function fetchToteatDia(fechaYYYYMMDD, creds) {
   url.searchParams.set('ini', fechaYYYYMMDD);
   url.searchParams.set('end', fechaYYYYMMDD);
   url.searchParams.set('detail_cancel_order', 'true');
-  const res = await fetch(url.toString());
-  const data = await res.json();
-  if (!res.ok || data.ok === false) throw new Error('Toteat rechazó la consulta para ' + fechaYYYYMMDD);
-  return (data && data.data) || [];
+
+  let ultimoError;
+  for (let intento = 1; intento <= intentos; intento++) {
+    try {
+      const res = await fetch(url.toString());
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error('Toteat rechazó la consulta para ' + fechaYYYYMMDD);
+      return (data && data.data) || [];
+    } catch (e) {
+      ultimoError = e;
+      if (intento < intentos) await esperar(400 * intento);
+    }
+  }
+  throw ultimoError;
+}
+
+function esperar(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function ultimosNDias(endYYYYMMDD, n) {
