@@ -115,6 +115,7 @@
       <tr>
         <th>Insumo</th>
         <th class="num">Necesidad hoy</th>
+        <th class="num">= envases</th>
         <th class="num">Stock actual</th>
         <th class="num">Stock proyectado</th>
         <th class="num">Mínimo</th>
@@ -180,8 +181,9 @@ async function cargar() {
         const tr = document.createElement('tr');
         if (d.bajoMinimo) tr.classList.add('bajo-minimo');
         tr.innerHTML = `
-          <td class="nombre">${d.insumo}</td>
-          <td class="num">${d.necesidadHoy}</td>
+          <td class="nombre">${d.insumo}${d.tamanoEnvase > 1 ? ` <span style="color:var(--ink-soft);font-size:11px;">(envase = ${d.tamanoEnvase})</span>` : ''}</td>
+          <td class="num">${d.necesidadHoyUnidadReceta}</td>
+          <td class="num">${d.necesidadHoyEnvases}</td>
           <td class="num">${d.stockActual}</td>
           <td class="num">${d.stockProyectadoFinDia}</td>
           <td class="num">${d.stockMinimo}</td>
