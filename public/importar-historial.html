@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Importar historial de ventas</title>
+<style>
+  :root{--bg:#EDEFF2;--panel:#FFFFFF;--ink:#1B1F23;--ink-soft:#5B6472;--line:#D7DBE1;--accent:#2B6777;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Space Grotesk","Segoe UI",system-ui,sans-serif;padding:24px 16px;}
+  h1{font-size:20px;margin:0 0 4px;}
+  p.sub{color:var(--ink-soft);font-size:13px;margin:0 0 20px;}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;}
+  input[type="file"]{width:100%;padding:12px;border:1px dashed var(--line);border-radius:8px;font-size:14px;margin-bottom:14px;}
+  button{border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;padding:10px 20px;border-radius:8px;cursor:pointer;}
+  button:disabled{opacity:0.5;}
+  .status{margin-top:14px;font-size:13px;white-space:pre-wrap;font-family:"JetBrains Mono",monospace;}
+  .status.ok{color:#2E7D32;}
+  .status.err{color:#B3412C;}
+</style>
+</head>
+<body>
+<h1>Importar historial de ventas</h1>
+<p class="sub">Sube el archivo .json exportado desde tu otra app de Norai. Los días ya cerrados quedan guardados acá para no volver a pedirlos a Toteat; el día de hoy (si viene en el archivo) se ignora a propósito.</p>
+<section>
+  <input type="file" id="archivo" accept="application/json">
+  <button id="btn-subir">Importar</button>
+  <div class="status" id="status"></div>
+</section>
+
+<script>
+document.getElementById('btn-subir').addEventListener('click', async () => {
+  const input = document.getElementById('archivo');
+  const statusEl = document.getElementById('status');
+  if (!input.files.length) {
+    statusEl.textContent = 'Selecciona primero un archivo.';
+    statusEl.className = 'status err';
+    return;
+  }
+  statusEl.textContent = 'Leyendo archivo...';
+  statusEl.className = 'status';
+
+  try {
+    const texto = await input.files[0].text();
+    const json = JSON.parse(texto);
+
+    statusEl.textContent = 'Importando...';
+    const res = await fetch('/.netlify/functions/importar-historial', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(json),
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error || 'Error desconocido');
+
+    statusEl.textContent =
+      `Listo.\nImportados: ${j.importados}\nOmitidos por ser hoy: ${j.omitidosPorSerHoy}\nInválidos: ${j.invalidos}\nTotal días guardados en el historial: ${j.totalDiasEnHistorial}`;
+    statusEl.className = 'status ok';
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'status err';
+  }
+});
+</script>
+</body>
+</html>
