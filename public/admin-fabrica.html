@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fábrica · Recetas y stock</title>
+<style>
+  :root{
+    --bg:#EDEFF2;
+    --panel:#FFFFFF;
+    --ink:#1B1F23;
+    --ink-soft:#5B6472;
+    --line:#D7DBE1;
+    --accent:#2B6777;
+    --accent-ink:#FFFFFF;
+    --warn:#B8860B;
+    --warn-bg:#FBF1D9;
+    --danger:#B3412C;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    padding:24px 16px 80px;
+  }
+  h1{
+    font-size:22px;
+    letter-spacing:-0.01em;
+    margin:0 0 4px;
+  }
+  .sub{
+    color:var(--ink-soft);
+    font-size:13px;
+    margin:0 0 24px;
+  }
+  nav a{
+    color:var(--accent);
+    text-decoration:none;
+    font-size:13px;
+    font-weight:600;
+  }
+  section{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+    margin-bottom:20px;
+  }
+  section h2{
+    font-size:15px;
+    margin:0 0 2px;
+  }
+  section p.hint{
+    color:var(--ink-soft);
+    font-size:12.5px;
+    margin:0 0 14px;
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13.5px;
+  }
+  th{
+    text-align:left;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    color:var(--ink-soft);
+    border-bottom:1px solid var(--line);
+    padding:6px 6px;
+  }
+  td{
+    border-bottom:1px dashed var(--line);
+    padding:4px 6px;
+  }
+  input{
+    width:100%;
+    border:1px solid transparent;
+    background:transparent;
+    font-family:"JetBrains Mono", "Courier New", monospace;
+    font-size:13px;
+    padding:5px 6px;
+    border-radius:6px;
+    color:var(--ink);
+  }
+  input:focus{
+    outline:none;
+    border-color:var(--accent);
+    background:#F4FAFB;
+  }
+  input[type="number"]{
+    text-align:right;
+  }
+  .col-num{width:110px;}
+  .row-actions{width:34px;}
+  button.icon{
+    border:none;
+    background:none;
+    color:var(--danger);
+    cursor:pointer;
+    font-size:16px;
+    line-height:1;
+    padding:4px;
+  }
+  .toolbar{
+    display:flex;
+    gap:8px;
+    margin-top:12px;
+  }
+  button.add{
+    border:1px dashed var(--line);
+    background:none;
+    color:var(--accent);
+    font-size:13px;
+    font-weight:600;
+    padding:8px 12px;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  button.save{
+    border:none;
+    background:var(--accent);
+    color:var(--accent-ink);
+    font-size:13px;
+    font-weight:600;
+    padding:8px 16px;
+    border-radius:8px;
+    cursor:pointer;
+    margin-left:auto;
+  }
+  button.save:disabled{opacity:0.5;cursor:default;}
+  .status{
+    font-size:12.5px;
+    margin-top:8px;
+    min-height:16px;
+  }
+  .status.ok{color:#2E7D32;}
+  .status.err{color:var(--danger);}
+  .status.warn{color:var(--warn);}
+</style>
+</head>
+<body>
+
+<nav><a href="/pedido-fabrica.html">→ Ver pedido sugerido de hoy</a></nav>
+<h1>Recetas y stock de fábrica</h1>
+<p class="sub">Define qué insumo de fábrica consume cada producto vendido, y el stock mínimo que siempre debe quedar en la cafetería.</p>
+
+<section>
+  <h2>Recetas (producto → insumo)</h2>
+  <p class="hint">El nombre de "producto" debe coincidir exactamente con el nombre del producto en Toteat. "Cantidad por unidad" es cuánto insumo consume 1 unidad vendida (ej: 0.4 = un cuarto de lomo, o usa la unidad que prefieras siempre que sea consistente con el stock).</p>
+  <table id="tabla-recetas">
+    <thead>
+      <tr><th>Producto (Toteat)</th><th>Insumo de fábrica</th><th class="col-num">Cant. por unidad</th><th class="row-actions"></th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div class="toolbar">
+    <button class="add" data-add="recetas">+ Agregar fila</button>
+    <button class="save" data-save="recetas">Guardar recetas</button>
+  </div>
+  <div class="status" id="status-recetas"></div>
+</section>
+
+<section>
+  <h2>Stock de insumos</h2>
+  <p class="hint">Stock actual y stock mínimo por insumo. Cuando la proyección de venta deje el stock proyectado bajo el mínimo, aparecerá como alerta en el pedido del día.</p>
+  <table id="tabla-stock">
+    <thead>
+      <tr><th>Insumo</th><th class="col-num">Stock actual</th><th class="col-num">Stock mínimo</th><th class="row-actions"></th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div class="toolbar">
+    <button class="add" data-add="stock">+ Agregar fila</button>
+    <button class="save" data-save="stock">Guardar stock</button>
+  </div>
+  <div class="status" id="status-stock"></div>
+</section>
+
+<script>
+const FN = '/.netlify/functions/fabrica-datos';
+
+function filaRecetas(r = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" data-field="producto" value="${escapeAttr(r.producto || '')}" placeholder="Sandwich Lomo Vetado"></td>
+    <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}" placeholder="Lomo vetado sellado al vacío"></td>
+    <td><input type="number" step="0.01" data-field="cantidadPorUnidad" value="${r.cantidadPorUnidad ?? ''}" placeholder="0.4"></td>
+    <td><button class="icon" data-remove>✕</button></td>
+  `;
+  return tr;
+}
+
+function filaStock(r = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}" placeholder="Lomo vetado sellado al vacío"></td>
+    <td><input type="number" step="1" data-field="stockActual" value="${r.stockActual ?? ''}" placeholder="73"></td>
+    <td><input type="number" step="1" data-field="stockMinimo" value="${r.stockMinimo ?? ''}" placeholder="15"></td>
+    <td><button class="icon" data-remove>✕</button></td>
+  `;
+  return tr;
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/"/g, '&quot;');
+}
+
+async function cargar(key) {
+  const res = await fetch(`${FN}?key=${key}`);
+  const json = await res.json();
+  const tbody = document.querySelector(`#tabla-${key} tbody`);
+  tbody.innerHTML = '';
+  const fabricaFila = key === 'recetas' ? filaRecetas : filaStock;
+  (json.data || []).forEach((r) => tbody.appendChild(fabricaFila(r)));
+  if (!json.data || !json.data.length) tbody.appendChild(fabricaFila());
+}
+
+function leerTabla(key) {
+  const tbody = document.querySelector(`#tabla-${key} tbody`);
+  const filas = [...tbody.querySelectorAll('tr')];
+  return filas.map((tr) => {
+    const obj = {};
+    tr.querySelectorAll('input').forEach((input) => {
+      const campo = input.dataset.field;
+      obj[campo] = input.type === 'number' ? Number(input.value) : input.value.trim();
+    });
+    return obj;
+  }).filter((obj) => Object.values(obj).some((v) => v !== '' && v !== 0 && !Number.isNaN(v)));
+}
+
+async function guardar(key) {
+  const statusEl = document.getElementById(`status-${key}`);
+  const data = leerTabla(key);
+  statusEl.textContent = 'Guardando...';
+  statusEl.className = 'status';
+  try {
+    const res = await fetch(FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, data }),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+    statusEl.textContent = `Guardado (${json.guardado} filas).`;
+    statusEl.className = 'status ok';
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'status err';
+  }
+}
+
+document.querySelectorAll('button[data-add]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.add;
+    const tbody = document.querySelector(`#tabla-${key} tbody`);
+    tbody.appendChild(key === 'recetas' ? filaRecetas() : filaStock());
+  });
+});
+
+document.querySelectorAll('button[data-save]').forEach((btn) => {
+  btn.addEventListener('click', () => guardar(btn.dataset.save));
+});
+
+document.body.addEventListener('click', (e) => {
+  if (e.target.matches('[data-remove]')) {
+    e.target.closest('tr').remove();
+  }
+});
+
+cargar('recetas');
+cargar('stock');
+</script>
+</body>
+</html>
