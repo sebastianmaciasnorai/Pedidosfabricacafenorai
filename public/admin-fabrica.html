@@ -207,7 +207,7 @@ function renderProducto(p) {
     <div class="producto-top">
       <input type="checkbox" ${marcado ? 'checked' : ''}>
       <label>${p.producto}</label>
-      <span class="vendidos">${p.unidadesVendidas} vendidos · 7 días</span>
+      <span class="vendidos">${p.unidadesVendidas} u. · $${formatoMonto(p.ventaTotal)} · 7 días</span>
     </div>
     <div class="insumos-box"></div>
   `;
@@ -266,6 +266,7 @@ function renderProducto(p) {
 }
 
 function escapeAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
+function formatoMonto(n) { return Math.round(Number(n) || 0).toLocaleString('es-CL'); }
 
 document.getElementById('buscador').addEventListener('input', (e) => renderCategorias(e.target.value));
 
