@@ -381,6 +381,38 @@ let mapaInsumos = {};
 let mapaPatrones = {};
 let stockFilas = [];
 
+const DRAFT_KEY = 'norai_fabrica_draft_v1';
+
+function guardarBorrador() {
+  try {
+    const stockCrudo = [...document.querySelectorAll('#tabla-stock tbody tr')].map((tr) => {
+      const obj = {};
+      tr.querySelectorAll('input').forEach((input) => { obj[input.dataset.field] = input.value; });
+      return obj;
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ mapaInsumos, mapaPatrones, stock: stockCrudo }));
+  } catch (e) { /* si localStorage falla (modo privado, etc.), simplemente no hay borrador */ }
+}
+
+let borradorTimeout = null;
+function guardarBorradorDebounced() {
+  clearTimeout(borradorTimeout);
+  borradorTimeout = setTimeout(guardarBorrador, 400);
+}
+
+function cargarBorrador() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function limpiarBorrador() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* nada que limpiar */ }
+}
+
 function cargarAdmin() {
   const FN_PRODUCTOS = '/.netlify/functions/productos-toteat';
   const FN_DATOS = '/.netlify/functions/fabrica-datos';
@@ -414,10 +446,26 @@ function cargarAdmin() {
       }
     });
 
+    // Si hay un borrador local (cambios que no se alcanzaron a guardar antes
+    // de que la página se recargara), tiene prioridad sobre lo del servidor.
+    const borrador = cargarBorrador();
+    if (borrador) {
+      if (borrador.mapaInsumos) mapaInsumos = borrador.mapaInsumos;
+      if (borrador.mapaPatrones) mapaPatrones = borrador.mapaPatrones;
+      if (borrador.stock && borrador.stock.length) stockFilas = borrador.stock;
+      document.getElementById('status').textContent = 'Se restauraron cambios sin guardar de la sesión anterior.';
+      document.getElementById('status').className = 'status ok';
+    }
+
     document.getElementById('buscador').style.display = 'block';
     document.getElementById('seccion-stock').style.display = 'block';
     renderCategorias();
     renderStock();
+
+    document.getElementById('categorias').addEventListener('input', guardarBorradorDebounced);
+    document.getElementById('categorias').addEventListener('change', guardarBorradorDebounced);
+    document.getElementById('tabla-stock').addEventListener('input', guardarBorradorDebounced);
+    document.getElementById('tabla-stock').addEventListener('change', guardarBorradorDebounced);
   })();
 }
 
@@ -791,6 +839,7 @@ document.getElementById('btn-guardar').addEventListener('click', async () => {
 
     statusEl.textContent = `Guardado: ${j1.guardado} recetas, ${j2.guardado} insumos en stock.`;
     statusEl.className = 'status ok';
+    limpiarBorrador();
   } catch (e) {
     statusEl.textContent = 'Error: ' + e.message;
     statusEl.className = 'status err';
