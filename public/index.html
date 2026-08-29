@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fábrica · Norai Café</title>
+<style>
+  :root{
+    --bg:#EDEFF2; --panel:#FFFFFF; --ink:#1B1F23; --ink-soft:#5B6472;
+    --line:#D7DBE1; --accent:#2B6777; --accent-ink:#FFFFFF;
+    --warn:#B8860B; --warn-bg:#FBF1D9; --danger:#B3412C; --danger-bg:#FBEAE6;
+    --ok-bg:#E9F4EC; --ok-ink:#2E7D32;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Space Grotesk","Segoe UI",system-ui,sans-serif;padding:0 16px 100px;}
+
+  header{
+    position:sticky;top:0;background:var(--bg);z-index:10;
+    padding:20px 0 0;
+  }
+  h1{font-size:20px;letter-spacing:-0.01em;margin:0 0 12px;}
+
+  .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line);}
+  .tab-btn{
+    border:none;background:none;padding:10px 4px;font-size:14px;font-weight:600;
+    color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-right:16px;
+  }
+  .tab-btn.activo{color:var(--accent);border-bottom-color:var(--accent);}
+
+  .tab-panel{display:none;padding-top:4px;}
+  .tab-panel.activo{display:block;}
+
+  .sub{color:var(--ink-soft);font-size:13px;margin:0 0 16px;}
+
+  /* ---- pedido ---- */
+  #fecha{font-family:"JetBrains Mono", monospace;font-size:12.5px;color:var(--ink-soft);margin-bottom:4px;}
+  .alerta-banner{background:var(--danger-bg);border:1px solid #E3B7AB;color:var(--danger);border-radius:10px;padding:12px 14px;font-size:13.5px;font-weight:600;margin-bottom:16px;display:none;}
+  .alerta-banner.visible{display:block;}
+  .ok-banner{background:var(--ok-bg);border:1px solid #B7DABF;color:var(--ok-ink);border-radius:10px;padding:12px 14px;font-size:13.5px;font-weight:600;margin-bottom:16px;display:none;}
+  .ok-banner.visible{display:block;}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:20px;}
+  section h2{font-size:15px;margin:0 0 12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:0.03em;color:var(--ink-soft);border-bottom:1px solid var(--line);padding:6px 6px;}
+  td{border-bottom:1px dashed var(--line);padding:7px 6px;font-family:"JetBrains Mono", monospace;font-size:12.5px;}
+  td.nombre{font-family:inherit;font-size:13px;}
+  tr.bajo-minimo td{background:var(--danger-bg);}
+  .num{text-align:right;}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;}
+  .pill.pedir{background:var(--danger);color:#fff;}
+  .pill.ok{background:#D9E9DC;color:var(--ok-ink);}
+  #loading-pedido{color:var(--ink-soft);font-size:13px;}
+
+  /* ---- admin (recetas) ---- */
+  .search{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;margin-bottom:16px;background:var(--panel);}
+  .search:focus{outline:none;border-color:var(--accent);}
+  .categoria{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden;}
+  .categoria-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;user-select:none;}
+  .categoria-header h2{font-size:14px;margin:0;}
+  .categoria-header .count{font-size:12px;color:var(--ink-soft);font-family:"JetBrains Mono",monospace;}
+  .categoria-body{border-top:1px solid var(--line);display:none;}
+  .categoria.abierta .categoria-body{display:block;}
+  .categoria.abierta .chevron{transform:rotate(90deg);}
+  .chevron{transition:transform 0.15s;color:var(--ink-soft);}
+  .producto-row{padding:10px 14px;border-bottom:1px dashed var(--line);}
+  .producto-row:last-child{border-bottom:none;}
+  .producto-top{display:flex;align-items:center;gap:10px;}
+  .producto-top label{flex:1;font-size:13.5px;cursor:pointer;}
+  .producto-top .vendidos{font-size:11px;color:var(--ink-soft);font-family:"JetBrains Mono",monospace;white-space:nowrap;}
+  input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0;}
+  .insumos-box{margin-top:10px;margin-left:28px;padding:10px;background:#F4FAFB;border-radius:8px;display:none;}
+  .producto-row.marcado .insumos-box{display:block;}
+  .insumo-fila{display:flex;gap:6px;margin-bottom:6px;align-items:center;}
+  .insumo-fila input[type="text"]{flex:2;}
+  .insumo-fila input[type="number"]{flex:1;text-align:right;}
+  .insumo-fila input{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:"JetBrains Mono",monospace;font-size:12.5px;background:#fff;}
+  .insumo-fila button{border:none;background:none;color:var(--danger);font-size:15px;cursor:pointer;padding:2px 6px;}
+  .add-insumo{border:1px dashed var(--line);background:none;color:var(--accent);font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;}
+  section.stock{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:20px;}
+  section.stock h2{font-size:15px;margin:0 0 2px;}
+  section.stock p.hint{color:var(--ink-soft);font-size:12.5px;margin:0 0 14px;}
+  td input{width:100%;border:1px solid transparent;background:transparent;font-family:"JetBrains Mono",monospace;font-size:13px;padding:5px 6px;border-radius:6px;color:var(--ink);}
+  td input:focus{outline:none;border-color:var(--accent);background:#F4FAFB;}
+  td input[type="number"]{text-align:right;}
+  .toolbar{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap;}
+  button.add{border:1px dashed var(--line);background:none;color:var(--accent);font-size:13px;font-weight:600;padding:8px 12px;border-radius:8px;cursor:pointer;}
+  button.icon{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:4px;}
+  #loading-admin{color:var(--ink-soft);font-size:13px;padding:20px 0;}
+
+  .barra-guardar{
+    position:fixed;bottom:0;left:0;right:0;background:var(--panel);
+    border-top:1px solid var(--line);padding:12px 16px;display:none;gap:10px;align-items:center;
+    box-shadow:0 -2px 10px rgba(0,0,0,0.05);
+  }
+  .barra-guardar.visible{display:flex;}
+  button.save{border:none;background:var(--accent);color:var(--accent-ink);font-size:14px;font-weight:700;padding:10px 20px;border-radius:8px;cursor:pointer;}
+  .status{font-size:12.5px;}
+  .status.ok{color:#2E7D32;}
+  .status.err{color:var(--danger);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Fábrica · Norai Café</h1>
+  <div class="tabs">
+    <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
+    <button class="tab-btn" data-tab="admin">Recetas y stock</button>
+  </div>
+</header>
+
+<!-- ================= TAB: PEDIDO ================= -->
+<div class="tab-panel activo" id="tab-pedido">
+  <p class="sub">Proyección de venta de hoy, explotada a insumos, comparada contra tu stock.</p>
+  <div id="fecha"></div>
+  <div id="loading-pedido">Calculando...</div>
+  <div class="alerta-banner" id="banner-alerta"></div>
+  <div class="ok-banner" id="banner-ok">Todo el stock proyectado se mantiene sobre el mínimo. No hay que pedir nada hoy.</div>
+  <section id="seccion-detalle" style="display:none">
+    <h2>Detalle por insumo</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Insumo</th>
+          <th class="num">Necesidad hoy</th>
+          <th class="num">= envases</th>
+          <th class="num">Stock actual</th>
+          <th class="num">Stock proyectado</th>
+          <th class="num">Mínimo</th>
+          <th class="num">Pedir a fábrica</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-detalle"></tbody>
+    </table>
+  </section>
+</div>
+
+<!-- ================= TAB: ADMIN (recetas/stock) ================= -->
+<div class="tab-panel" id="tab-admin">
+  <p class="sub">Marca los productos que vienen de fábrica (completos o en parte) y dile cuánto insumo consume cada unidad vendida. La lista viene directo de tus ventas de Toteat de los últimos 7 días.</p>
+  <p class="sub" style="margin-top:-14px;"><strong>Tip:</strong> si el producto completo se elabora en fábrica (ej: un galletón), márcalo y deja el insumo en blanco. Si solo una parte usa un insumo de fábrica (ej: un plato con "lomo vetado sous vide"), escribe ese insumo específico y cuánto usa.</p>
+
+  <div id="loading-admin">Cargando productos desde Toteat...</div>
+  <input type="text" class="search" id="buscador" placeholder="Buscar producto..." style="display:none">
+  <div id="categorias"></div>
+
+  <section class="stock" id="seccion-stock" style="display:none">
+    <h2>Stock de insumos</h2>
+    <p class="hint">Stock actual y mínimo, medidos en <strong>envases</strong> (como te los manda la fábrica). "Tamaño envase" es cuánto trae cada envase, en la MISMA unidad que uses en las recetas de arriba (ej: si escribiste "200" en una receta pensando en gramos, y la fábrica manda envases de 1 kilo, pon 1000 acá). Si el insumo ya se mide en unidades completas, deja el tamaño de envase en 1.</p>
+    <table id="tabla-stock">
+      <thead><tr><th>Insumo</th><th style="width:90px">Tamaño envase</th><th style="width:90px">Stock actual (envases)</th><th style="width:90px">Mínimo (envases)</th><th style="width:30px"></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="toolbar">
+      <button class="add" id="btn-sync-stock">+ Agregar insumos nuevos de las recetas</button>
+      <button class="add" id="btn-add-stock">+ Fila manual</button>
+    </div>
+  </section>
+</div>
+
+<div class="barra-guardar" id="barra-guardar">
+  <button class="save" id="btn-guardar">Guardar todo</button>
+  <span class="status" id="status"></span>
+</div>
+
+<script>
+// ===================== TABS =====================
+const tabButtons = document.querySelectorAll('.tab-btn');
+const tabPanels = document.querySelectorAll('.tab-panel');
+let adminCargado = false;
+
+tabButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    tabButtons.forEach((b) => b.classList.remove('activo'));
+    tabPanels.forEach((p) => p.classList.remove('activo'));
+    btn.classList.add('activo');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('activo');
+
+    const esAdmin = btn.dataset.tab === 'admin';
+    document.getElementById('barra-guardar').classList.toggle('visible', esAdmin);
+
+    if (esAdmin && !adminCargado) {
+      adminCargado = true;
+      cargarAdmin();
+    }
+  });
+});
+
+// ===================== PEDIDO DE HOY =====================
+(function () {
+  const FN = '/.netlify/functions/pedido-fabrica';
+
+  async function cargar() {
+    const loading = document.getElementById('loading-pedido');
+    try {
+      const res = await fetch(FN);
+      const json = await res.json();
+      loading.style.display = 'none';
+
+      if (!json.ok) {
+        loading.style.display = 'block';
+        loading.textContent = 'Error: ' + (json.error || 'desconocido');
+        return;
+      }
+
+      let textoFecha = `Proyectando ${json.fechaProyectada || ''} · historial ${json.rangeIni || ''}–${json.rangeEnd || ''}`;
+      if (json.checkpoint) {
+        const cp = json.checkpoint;
+        const hora = cp.ultimaHoraConVentas != null ? `${cp.ultimaHoraConVentas}:00` : '—';
+        const sinc = cp.ultimaSincronizacion ? new Date(cp.ultimaSincronizacion).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—';
+        textoFecha += `\nSincronizado ${sinc} · última boleta vista: ${cp.fechaHoy || ''} ${hora} · ${cp.ordenesHoy ?? '—'} boletas hoy`;
+      }
+      document.getElementById('fecha').textContent = textoFecha;
+      document.getElementById('fecha').style.whiteSpace = 'pre-line';
+
+      if (json.nota) {
+        loading.style.display = 'block';
+        loading.textContent = json.nota;
+        return;
+      }
+
+      const detalle = json.detalle || [];
+      const alertas = json.alertas || [];
+
+      if (alertas.length) {
+        const banner = document.getElementById('banner-alerta');
+        banner.classList.add('visible');
+        banner.textContent = `⚠ ${alertas.length} insumo(s) van a quedar bajo el mínimo hoy: ` + alertas.map((a) => a.insumo).join(', ');
+      } else {
+        document.getElementById('banner-ok').classList.add('visible');
+      }
+
+      if (detalle.length) {
+        document.getElementById('seccion-detalle').style.display = 'block';
+        const tbody = document.getElementById('tbody-detalle');
+        tbody.innerHTML = '';
+        detalle.forEach((d) => {
+          const tr = document.createElement('tr');
+          if (d.bajoMinimo) tr.classList.add('bajo-minimo');
+          tr.innerHTML = `
+            <td class="nombre">${d.insumo}${d.tamanoEnvase > 1 ? ` <span style="color:var(--ink-soft);font-size:11px;">(envase = ${d.tamanoEnvase})</span>` : ''}</td>
+            <td class="num">${d.necesidadHoyUnidadReceta}</td>
+            <td class="num">${d.necesidadHoyEnvases}</td>
+            <td class="num">${d.stockActual}</td>
+            <td class="num">${d.stockProyectadoFinDia}</td>
+            <td class="num">${d.stockMinimo}</td>
+            <td class="num">${d.sugeridoPedirAFabrica > 0
+              ? `<span class="pill pedir">${d.sugeridoPedirAFabrica}</span>`
+              : `<span class="pill ok">—</span>`}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+    } catch (e) {
+      loading.style.display = 'block';
+      loading.textContent = 'Error de conexión: ' + e.message;
+    }
+  }
+
+  cargar();
+})();
+
+// ===================== RECETAS Y STOCK =====================
+let categorias = [];
+let mapaInsumos = {};
+let stockFilas = [];
+
+function cargarAdmin() {
+  const FN_PRODUCTOS = '/.netlify/functions/productos-toteat';
+  const FN_DATOS = '/.netlify/functions/fabrica-datos';
+
+  (async function () {
+    const [resProd, resRecetas, resStock] = await Promise.all([
+      fetch(FN_PRODUCTOS).then((r) => r.json()),
+      fetch(`${FN_DATOS}?key=recetas`).then((r) => r.json()),
+      fetch(`${FN_DATOS}?key=stock`).then((r) => r.json()),
+    ]);
+
+    document.getElementById('loading-admin').style.display = 'none';
+
+    if (!resProd.ok) {
+      document.getElementById('loading-admin').style.display = 'block';
+      document.getElementById('loading-admin').textContent = 'Error trayendo productos: ' + (resProd.error || '');
+      return;
+    }
+
+    categorias = resProd.categorias || [];
+    stockFilas = (resStock.data || []);
+
+    (resRecetas.data || []).forEach((r) => {
+      if (!mapaInsumos[r.producto]) mapaInsumos[r.producto] = [];
+      mapaInsumos[r.producto].push({ insumo: r.insumo, cantidadPorUnidad: r.cantidadPorUnidad });
+    });
+
+    document.getElementById('buscador').style.display = 'block';
+    document.getElementById('seccion-stock').style.display = 'block';
+    renderCategorias();
+    renderStock();
+  })();
+}
+
+function renderCategorias(filtro = '') {
+  const cont = document.getElementById('categorias');
+  cont.innerHTML = '';
+  const f = filtro.trim().toLowerCase();
+
+  categorias.forEach((cat, ci) => {
+    const productosFiltrados = f ? cat.productos.filter((p) => p.producto.toLowerCase().includes(f)) : cat.productos;
+    if (f && productosFiltrados.length === 0) return;
+
+    const div = document.createElement('div');
+    div.className = 'categoria' + (f ? ' abierta' : '');
+    div.innerHTML = `
+      <div class="categoria-header" data-toggle="${ci}">
+        <h2>${cat.categoria}</h2>
+        <span class="count">${productosFiltrados.length} producto(s) <span class="chevron">›</span></span>
+      </div>
+      <div class="categoria-body" id="cat-body-${ci}"></div>
+    `;
+    cont.appendChild(div);
+
+    const body = div.querySelector('.categoria-body');
+    productosFiltrados.forEach((p) => body.appendChild(renderProducto(p)));
+  });
+
+  cont.querySelectorAll('.categoria-header').forEach((h) => {
+    h.addEventListener('click', () => h.closest('.categoria').classList.toggle('abierta'));
+  });
+}
+
+function renderProducto(p) {
+  const marcado = !!mapaInsumos[p.producto];
+  const row = document.createElement('div');
+  row.className = 'producto-row' + (marcado ? ' marcado' : '');
+  row.dataset.producto = p.producto;
+
+  row.innerHTML = `
+    <div class="producto-top">
+      <input type="checkbox" ${marcado ? 'checked' : ''}>
+      <label>${p.producto}</label>
+      <span class="vendidos">${p.unidadesVendidas} u. · $${formatoMonto(p.precioUnitario)} c/u · 7 días</span>
+    </div>
+    <div class="insumos-box"></div>
+  `;
+
+  const checkbox = row.querySelector('input[type="checkbox"]');
+  const insumosBox = row.querySelector('.insumos-box');
+
+  function pintarInsumos() {
+    insumosBox.innerHTML = '';
+    const filas = mapaInsumos[p.producto] || [];
+    filas.forEach((f, idx) => insumosBox.appendChild(filaInsumo(p.producto, idx, f)));
+    const btn = document.createElement('button');
+    btn.className = 'add-insumo';
+    btn.textContent = '+ insumo';
+    btn.addEventListener('click', () => {
+      mapaInsumos[p.producto] = mapaInsumos[p.producto] || [];
+      mapaInsumos[p.producto].push({ insumo: '', cantidadPorUnidad: '' });
+      pintarInsumos();
+    });
+    insumosBox.appendChild(btn);
+  }
+
+  function filaInsumo(producto, idx, f) {
+    const fila = document.createElement('div');
+    fila.className = 'insumo-fila';
+    fila.innerHTML = `
+      <input type="text" placeholder="Insumo (ej: Lomo vetado sellado al vacío)" value="${escapeAttr(f.insumo)}">
+      <input type="number" step="0.01" placeholder="Cant./u" value="${f.cantidadPorUnidad}">
+      <button title="Quitar">✕</button>
+    `;
+    const [inputInsumo, inputCant] = fila.querySelectorAll('input');
+    inputInsumo.addEventListener('input', () => { mapaInsumos[producto][idx].insumo = inputInsumo.value; });
+    inputCant.addEventListener('input', () => { mapaInsumos[producto][idx].cantidadPorUnidad = Number(inputCant.value); });
+    fila.querySelector('button').addEventListener('click', () => {
+      mapaInsumos[producto].splice(idx, 1);
+      if (mapaInsumos[producto].length === 0) delete mapaInsumos[producto];
+      pintarInsumos();
+    });
+    return fila;
+  }
+
+  if (marcado) pintarInsumos();
+
+  checkbox.addEventListener('change', () => {
+    if (checkbox.checked) {
+      row.classList.add('marcado');
+      if (!mapaInsumos[p.producto]) mapaInsumos[p.producto] = [{ insumo: '', cantidadPorUnidad: '' }];
+      pintarInsumos();
+    } else {
+      row.classList.remove('marcado');
+      delete mapaInsumos[p.producto];
+    }
+  });
+
+  return row;
+}
+
+function escapeAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
+function formatoMonto(n) { return Math.round(Number(n) || 0).toLocaleString('es-CL'); }
+
+document.getElementById('buscador').addEventListener('input', (e) => renderCategorias(e.target.value));
+
+function filaStock(r = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}"></td>
+    <td><input type="number" step="1" min="1" data-field="tamanoEnvase" value="${r.tamanoEnvase ?? 1}"></td>
+    <td><input type="number" step="0.1" data-field="stockActual" value="${r.stockActual ?? ''}"></td>
+    <td><input type="number" step="0.1" data-field="stockMinimo" value="${r.stockMinimo ?? ''}"></td>
+    <td><button class="icon" data-remove>✕</button></td>
+  `;
+  return tr;
+}
+
+function renderStock() {
+  const tbody = document.querySelector('#tabla-stock tbody');
+  tbody.innerHTML = '';
+  stockFilas.forEach((r) => tbody.appendChild(filaStock(r)));
+}
+
+document.getElementById('btn-add-stock').addEventListener('click', () => {
+  document.querySelector('#tabla-stock tbody').appendChild(filaStock());
+});
+
+document.getElementById('btn-sync-stock').addEventListener('click', () => {
+  const insumosEnUso = new Set();
+  Object.entries(mapaInsumos).forEach(([producto, filas]) => {
+    const conTexto = filas.filter((f) => f.insumo);
+    if (conTexto.length) {
+      conTexto.forEach((f) => insumosEnUso.add(f.insumo));
+    } else {
+      insumosEnUso.add(producto);
+    }
+  });
+  const yaEnStock = new Set([...document.querySelectorAll('#tabla-stock [data-field="insumo"]')].map((i) => i.value));
+  const tbody = document.querySelector('#tabla-stock tbody');
+  let agregados = 0;
+  insumosEnUso.forEach((insumo) => {
+    if (!yaEnStock.has(insumo)) {
+      tbody.appendChild(filaStock({ insumo, tamanoEnvase: 1, stockActual: 0, stockMinimo: 0 }));
+      agregados++;
+    }
+  });
+  document.getElementById('status').textContent = agregados
+    ? `${agregados} insumo(s) agregado(s) al stock, completa las cantidades.`
+    : 'No hay insumos nuevos para agregar.';
+  document.getElementById('status').className = 'status ok';
+});
+
+document.body.addEventListener('click', (e) => {
+  if (e.target.matches('[data-remove]')) e.target.closest('tr').remove();
+});
+
+function leerStockTabla() {
+  const filas = [...document.querySelectorAll('#tabla-stock tbody tr')];
+  return filas.map((tr) => {
+    const obj = {};
+    tr.querySelectorAll('input').forEach((input) => {
+      obj[input.dataset.field] = input.type === 'number' ? Number(input.value) : input.value.trim();
+    });
+    return obj;
+  }).filter((o) => o.insumo);
+}
+
+function leerRecetas() {
+  const recetas = [];
+  Object.entries(mapaInsumos).forEach(([producto, filas]) => {
+    const filasValidas = filas.filter((f) => f.insumo && f.cantidadPorUnidad > 0);
+    if (filasValidas.length > 0) {
+      filasValidas.forEach((f) => {
+        recetas.push({ producto, insumo: f.insumo.trim(), cantidadPorUnidad: Number(f.cantidadPorUnidad) });
+      });
+    } else {
+      recetas.push({ producto, insumo: producto, cantidadPorUnidad: 1 });
+    }
+  });
+  return recetas;
+}
+
+document.getElementById('btn-guardar').addEventListener('click', async () => {
+  const FN_DATOS = '/.netlify/functions/fabrica-datos';
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'Guardando...';
+  statusEl.className = 'status';
+  try {
+    const recetas = leerRecetas();
+    const stock = leerStockTabla();
+
+    const [r1, r2] = await Promise.all([
+      fetch(FN_DATOS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'recetas', data: recetas }) }),
+      fetch(FN_DATOS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'stock', data: stock }) }),
+    ]);
+    const j1 = await r1.json(), j2 = await r2.json();
+    if (!j1.ok || !j2.ok) throw new Error(j1.error || j2.error || 'Error desconocido');
+
+    statusEl.textContent = `Guardado: ${j1.guardado} recetas, ${j2.guardado} insumos en stock.`;
+    statusEl.className = 'status ok';
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'status err';
+  }
+});
+</script>
+</body>
+</html>
