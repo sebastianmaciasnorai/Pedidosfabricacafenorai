@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedido a fábrica de hoy</title>
+<style>
+  :root{
+    --bg:#EDEFF2;
+    --panel:#FFFFFF;
+    --ink:#1B1F23;
+    --ink-soft:#5B6472;
+    --line:#D7DBE1;
+    --accent:#2B6777;
+    --warn:#B8860B;
+    --warn-bg:#FBF1D9;
+    --danger:#B3412C;
+    --danger-bg:#FBEAE6;
+    --ok-bg:#E9F4EC;
+    --ok-ink:#2E7D32;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    padding:24px 16px 80px;
+  }
+  h1{font-size:22px;letter-spacing:-0.01em;margin:0 0 4px;}
+  .sub{color:var(--ink-soft);font-size:13px;margin:0 0 4px;}
+  nav a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600;}
+  #fecha{font-family:"JetBrains Mono", monospace;font-size:12.5px;color:var(--ink-soft);margin-bottom:20px;}
+
+  .alerta-banner{
+    background:var(--danger-bg);
+    border:1px solid #E3B7AB;
+    color:var(--danger);
+    border-radius:10px;
+    padding:12px 14px;
+    font-size:13.5px;
+    font-weight:600;
+    margin-bottom:16px;
+    display:none;
+  }
+  .alerta-banner.visible{display:block;}
+  .ok-banner{
+    background:var(--ok-bg);
+    border:1px solid #B7DABF;
+    color:var(--ok-ink);
+    border-radius:10px;
+    padding:12px 14px;
+    font-size:13.5px;
+    font-weight:600;
+    margin-bottom:16px;
+    display:none;
+  }
+  .ok-banner.visible{display:block;}
+
+  section{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+    margin-bottom:20px;
+  }
+  section h2{font-size:15px;margin:0 0 12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{
+    text-align:left;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+    color:var(--ink-soft);
+    border-bottom:1px solid var(--line);
+    padding:6px 6px;
+  }
+  td{
+    border-bottom:1px dashed var(--line);
+    padding:7px 6px;
+    font-family:"JetBrains Mono", monospace;
+    font-size:12.5px;
+  }
+  td.nombre{font-family:inherit;font-size:13px;}
+  tr.bajo-minimo td{background:var(--danger-bg);}
+  .num{text-align:right;}
+  .pill{
+    display:inline-block;
+    font-size:11px;
+    font-weight:700;
+    padding:2px 8px;
+    border-radius:999px;
+  }
+  .pill.pedir{background:var(--danger);color:#fff;}
+  .pill.ok{background:#D9E9DC;color:var(--ok-ink);}
+  #loading{color:var(--ink-soft);font-size:13px;}
+</style>
+</head>
+<body>
+
+<nav><a href="/admin-fabrica.html">→ Editar recetas y stock</a></nav>
+<h1>Pedido a fábrica</h1>
+<p class="sub">Proyección de venta de hoy, explotada a insumos, comparada contra tu stock.</p>
+<div id="fecha"></div>
+
+<div id="loading">Calculando...</div>
+
+<div class="alerta-banner" id="banner-alerta"></div>
+<div class="ok-banner" id="banner-ok">Todo el stock proyectado se mantiene sobre el mínimo. No hay que pedir nada hoy.</div>
+
+<section id="seccion-detalle" style="display:none">
+  <h2>Detalle por insumo</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Insumo</th>
+        <th class="num">Necesidad hoy</th>
+        <th class="num">Stock actual</th>
+        <th class="num">Stock proyectado</th>
+        <th class="num">Mínimo</th>
+        <th class="num">Pedir a fábrica</th>
+      </tr>
+    </thead>
+    <tbody id="tbody-detalle"></tbody>
+  </table>
+</section>
+
+<script>
+const FN = '/.netlify/functions/pedido-fabrica';
+
+async function cargar() {
+  const loading = document.getElementById('loading');
+  try {
+    const res = await fetch(FN);
+    const json = await res.json();
+    loading.style.display = 'none';
+
+    if (!json.ok) {
+      loading.style.display = 'block';
+      loading.textContent = 'Error: ' + (json.error || 'desconocido');
+      return;
+    }
+
+    document.getElementById('fecha').textContent =
+      `Proyectando ${json.fechaProyectada || ''} · historial ${json.rangeIni || ''}–${json.rangeEnd || ''}`;
+
+    if (json.nota) {
+      loading.style.display = 'block';
+      loading.textContent = json.nota;
+      return;
+    }
+
+    const detalle = json.detalle || [];
+    const alertas = json.alertas || [];
+
+    if (alertas.length) {
+      const banner = document.getElementById('banner-alerta');
+      banner.classList.add('visible');
+      banner.textContent = `⚠ ${alertas.length} insumo(s) van a quedar bajo el mínimo hoy: ` +
+        alertas.map((a) => a.insumo).join(', ');
+    } else {
+      document.getElementById('banner-ok').classList.add('visible');
+    }
+
+    if (detalle.length) {
+      document.getElementById('seccion-detalle').style.display = 'block';
+      const tbody = document.getElementById('tbody-detalle');
+      tbody.innerHTML = '';
+      detalle.forEach((d) => {
+        const tr = document.createElement('tr');
+        if (d.bajoMinimo) tr.classList.add('bajo-minimo');
+        tr.innerHTML = `
+          <td class="nombre">${d.insumo}</td>
+          <td class="num">${d.necesidadHoy}</td>
+          <td class="num">${d.stockActual}</td>
+          <td class="num">${d.stockProyectadoFinDia}</td>
+          <td class="num">${d.stockMinimo}</td>
+          <td class="num">${d.sugeridoPedirAFabrica > 0
+            ? `<span class="pill pedir">${d.sugeridoPedirAFabrica}</span>`
+            : `<span class="pill ok">—</span>`}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (e) {
+    loading.style.display = 'block';
+    loading.textContent = 'Error de conexión: ' + e.message;
+  }
+}
+
+cargar();
+</script>
+</body>
+</html>
