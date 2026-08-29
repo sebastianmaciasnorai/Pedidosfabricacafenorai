@@ -423,20 +423,34 @@ function qtyProductoTotalDia(dia, nombreProducto) {
 // HELPERS (idénticos a sales-analytics.js / lookup-receipt.js)
 // ============================================================
 
-// Junta cada modificador (fila "- Algo" a $0) con el producto anterior.
+// Junta cada modificador/variante (ej: sabor de tartaleta, "Sin Lactosa" de
+// un café) con su producto padre. Toteat NO manda el modificador con un
+// guion "-" al principio del nombre (como se asumía antes) -- lo manda como
+// una línea aparte cuyo campo "lineReference" apunta al "lineId" de la
+// línea del producto principal. Ejemplo real de Toteat:
+//   { lineId: 111, lineReference: 0,   name: "Tartaleta" }       <- producto
+//   { lineId: 112, lineReference: 111, name: "Pie de Limon" }    <- variante
+// Un producto puede tener más de un modificador (ej: un jugo con "SIN
+// Azucar" + sabor "Frutilla"), y en ese caso se van concatenando todos.
 function mergeModifiers(rawProducts) {
   const merged = [];
+  const indexPorLineId = new Map();
+
   for (const p of rawProducts) {
-    const rawName = String(p.name || '').trim();
-    const isModifier = rawName.startsWith('-');
-    if (isModifier && merged.length > 0) {
-      const modText = rawName.replace(/^-+\s*/, '').trim();
-      if (modText) {
-        merged[merged.length - 1].name = merged[merged.length - 1].name + ' (' + modText + ')';
+    const esModificador = p.lineReference != null && Number(p.lineReference) !== 0;
+
+    if (esModificador) {
+      const idxPadre = indexPorLineId.get(p.lineReference);
+      const modText = String(p.name || '').trim();
+      if (idxPadre != null && modText) {
+        merged[idxPadre].name = merged[idxPadre].name + ' (' + modText + ')';
       }
       continue;
     }
+
+    const rawName = String(p.name || '').trim();
     merged.push(Object.assign({}, p, { name: rawName }));
+    if (p.lineId != null) indexPorLineId.set(p.lineId, merged.length - 1);
   }
   return merged;
 }
