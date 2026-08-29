@@ -144,6 +144,16 @@ async function cargar() {
     document.getElementById('fecha').textContent =
       `Proyectando ${json.fechaProyectada || ''} · historial ${json.rangeIni || ''}–${json.rangeEnd || ''}`;
 
+    if (json.checkpoint) {
+      const cp = json.checkpoint;
+      const hora = cp.ultimaHoraConVentas != null ? `${cp.ultimaHoraConVentas}:00` : '—';
+      const sinc = cp.ultimaSincronizacion ? new Date(cp.ultimaSincronizacion).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—';
+      const nota = document.createElement('div');
+      nota.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--ink-soft);margin-bottom:16px;';
+      nota.textContent = `Sincronizado ${sinc} · última boleta vista: ${cp.fechaHoy || ''} ${hora} · ${cp.ordenesHoy ?? '—'} boletas hoy`;
+      document.getElementById('fecha').after(nota);
+    }
+
     if (json.nota) {
       loading.style.display = 'block';
       loading.textContent = json.nota;
