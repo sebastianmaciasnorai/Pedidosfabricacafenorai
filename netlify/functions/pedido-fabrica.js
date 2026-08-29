@@ -1,20 +1,34 @@
 // netlify/functions/pedido-fabrica.js
 //
-// Junta tres piezas para responder "¿qué le pedimos hoy a la fábrica?":
+// Junta estas piezas para responder "¿qué le pedimos hoy a la fábrica?":
 //
 //   1. Tendencia de cierre POR PRODUCTO (ventas-fabrica.js) -- cuántas
-//      unidades de cada producto vamos a vender hoy, proyectado.
-//   2. La receta producto -> insumo (Netlify Blobs: recetas.json) -- cuánto
-//      insumo de fábrica consume cada unidad vendida.
-//   3. El stock actual y mínimo de cada insumo (Netlify Blobs: stock.json).
+//      unidades de cada producto vamos a vender HOY en total, proyectado,
+//      y cuántas van ya vendidas hasta ahora.
+//   2. La receta producto -> insumo (Netlify Blobs: recetas.json).
+//   3. El STOCK CALCULADO de cada insumo (stock-calculado.js) -- último
+//      conteo real + recepciones - ventas REALES - mermas, desde el último
+//      conteo. Este stock YA tiene descontado todo lo vendido hasta ahora,
+//      así que aquí solo hace falta sumarle lo que falta por vender HOY
+//      (proyección de cierre menos lo ya vendido hoy) para proyectar cómo
+//      va a quedar el stock al cierre del día.
 //
-// Con eso arma, insumo por insumo: cuánto se va a necesitar hoy, cuánto va
-// a quedar de stock al cierre, y si hay que pedir más (y cuánto).
+// CAMBIO IMPORTANTE (antes vs. ahora): antes "stockActual" era un número
+// tecleado a mano en la pestaña "Recetas y stock", y acá se restaba la
+// proyección COMPLETA del día. Eso funcionaba porque ese número recién
+// tecleado no tenía descontada ninguna venta todavía. Ahora que el stock
+// se calcula solo (pestaña "Stock y mermas"), YA viene con las ventas de
+// hoy hasta el momento descontadas -- si acá restáramos la proyección
+// completa del día estaríamos descontando esas ventas DOS VECES. Por eso
+// la resta es solo "lo que falta por vender hoy", no el total proyectado.
 //
 // GET /.netlify/functions/pedido-fabrica?end=20260828&dias=14
 //   end  -> día que se proyecta (default: hoy)
 //   dias -> cuántos días hacia atrás pedirle a Toteat para tener buen
-//           historial de tendencia, incluyendo "end" (default: 14)
+//           historial de tendencia, incluyendo "end" (default: 14). Si
+//           algún insumo tiene un último conteo más antiguo que eso, el
+//           rango se estira solo hasta cubrirlo (para no perder ventas
+//           reales entre el conteo y hoy).
 //
 // Respuesta:
 // {
@@ -22,8 +36,9 @@
 //   rangeIni, rangeEnd, fechaProyectada,
 //   alertas: [ ...filas de "detalle" que quedaron bajo el mínimo... ],
 //   detalle: [
-//     { insumo, necesidadHoy, stockActual, stockMinimo,
-//       stockProyectadoFinDia, bajoMinimo, sugeridoPedirAFabrica },
+//     { insumo, necesidadHoyUnidadReceta, necesidadHoyEnvases, tamanoEnvase,
+//       stockActual, stockMinimo, stockProyectadoFinDia, bajoMinimo,
+//       sugeridoPedirAFabrica, ultimoConteoFecha },
 //     ...
 //   ]
 // }
@@ -37,6 +52,7 @@
 const { getStore } = require('@netlify/blobs');
 const { calcularTendenciaCierrePorProducto } = require('./ventas-fabrica');
 const { obtenerVentasConCache } = require('./ventas-cache');
+const { calcularStockPorInsumo, explotarARecetas } = require('./stock-calculado');
 
 const STORE_NAME = 'pedido-fabrica';
 
@@ -49,7 +65,7 @@ exports.handler = async (event) => {
 
   const end = qs.end || formatYYYYMMDD(new Date());
   const dias = Number(qs.dias) || 14;
-  const ini = sumarDiasYYYYMMDD(end, -(dias - 1));
+  const iniDeseada = sumarDiasYYYYMMDD(end, -(dias - 1));
 
   try {
     const store = getStore({
@@ -57,9 +73,11 @@ exports.handler = async (event) => {
       siteID: process.env.BLOBS_SITE_ID,
       token: process.env.BLOBS_TOKEN,
     });
-    const [recetas, stock] = await Promise.all([
+    const [recetas, stock, mermas, recepciones] = await Promise.all([
       store.get('recetas', { type: 'json' }),
       store.get('stock', { type: 'json' }),
+      store.get('mermas', { type: 'json' }),
+      store.get('recepciones', { type: 'json' }),
     ]);
 
     if (!recetas || !recetas.length) {
@@ -67,36 +85,42 @@ exports.handler = async (event) => {
         ok: true,
         alertas: [],
         detalle: [],
-        nota: 'No hay recetas cargadas todavía. Ve a /admin-fabrica.html y arma el mapeo producto -> insumo.',
+        nota: 'No hay recetas cargadas todavía. Ve a la pestaña "Recetas" y arma el mapeo producto -> insumo.',
       });
     }
+
+    // Si algún insumo tiene un último conteo más antiguo que la ventana de
+    // "dias", estira el ini para no perder ventas reales entre medio (si
+    // no, calcularStockPorInsumo subestimaría "vendido" y el stock
+    // calculado quedaría inflado).
+    const iniMasAntiguaPorConteo = (stock || []).reduce((min, s) => {
+      const f = (s.ultimoConteoFecha || '').slice(0, 10).replace(/-/g, '');
+      return f && f < min ? f : min;
+    }, iniDeseada);
+    const ini = iniMasAntiguaPorConteo < iniDeseada ? iniMasAntiguaPorConteo : iniDeseada;
 
     const resumen = await obtenerVentasConCache(ini, end, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU });
     const fechaAProyectarISO = yyyymmddToISO(end);
     const tendenciaProductos = calcularTendenciaCierrePorProducto(resumen.porDia, fechaAProyectarISO) || [];
 
-    const proyeccionPorProducto = new Map(
-      tendenciaProductos.map((t) => [t.producto, t.unidadesProyectadasCierre])
+    // Lo que falta por vender HOY (no el total proyectado -- ver nota
+    // arriba): proyección de cierre menos lo ya vendido hasta ahora.
+    const restantePorProducto = new Map(
+      tendenciaProductos.map((t) => [t.producto, Math.max(0, t.unidadesProyectadasCierre - t.unidadesVendidasHastaAhora)])
     );
+    const necesidadRestantePorInsumo = explotarARecetas(recetas, restantePorProducto);
 
-    // Explota proyección de productos -> necesidad de insumos.
-    const necesidadPorInsumo = new Map();
-    for (const receta of recetas) {
-      const proyeccionProducto = obtenerProyeccion(receta, proyeccionPorProducto);
-      if (proyeccionProducto === 0) continue;
-      const necesidad = proyeccionProducto * receta.cantidadPorUnidad;
-      necesidadPorInsumo.set(receta.insumo, (necesidadPorInsumo.get(receta.insumo) || 0) + necesidad);
-    }
-
-    const stockPorInsumo = new Map((stock || []).map((s) => [s.insumo, s]));
+    const stockCalculado = calcularStockPorInsumo({ recetas, stock: stock || [], mermas: mermas || [], recepciones: recepciones || [], porDia: resumen.porDia });
+    const stockPorInsumo = new Map(stockCalculado.map((s) => [s.insumo, s]));
 
     const detalle = [];
-    for (const [insumo, necesidadUnidadReceta] of necesidadPorInsumo.entries()) {
+    for (const [insumo, necesidadUnidadReceta] of necesidadRestantePorInsumo.entries()) {
+      if (necesidadUnidadReceta === 0) continue;
       const s = stockPorInsumo.get(insumo);
       const tamanoEnvase = s && s.tamanoEnvase > 0 ? s.tamanoEnvase : 1;
       const necesidadEnvases = necesidadUnidadReceta / tamanoEnvase;
 
-      const stockActual = s ? s.stockActual : 0;
+      const stockActual = s ? s.stockCalculado : 0;
       const stockMinimo = s ? s.stockMinimo : 0;
       const stockProyectado = round2(stockActual - necesidadEnvases);
       const bajoMinimo = stockProyectado < stockMinimo;
@@ -112,6 +136,7 @@ exports.handler = async (event) => {
         stockProyectadoFinDia: stockProyectado,
         bajoMinimo,
         sugeridoPedirAFabrica: sugeridoPedir,
+        ultimoConteoFecha: s ? s.ultimoConteoFecha : null,
       });
     }
 
@@ -131,25 +156,6 @@ exports.handler = async (event) => {
     return jsonResponse(502, { ok: false, error: 'No se pudo calcular el pedido a fábrica.', detail: String(e) });
   }
 };
-
-// Si la receta tiene "patronToken" (viene de la pantalla de "sabores
-// agrupados"), suma la proyección de TODOS los productos que empiecen con
-// el nombre base de la receta Y contengan ese token en algún lado del
-// nombre (ej: "Club Desayuno Muffin (Latte, M. Arándano)" contiene el
-// token "M. Arándano"). Si no tiene patronToken, es una receta normal de
-// nombre exacto.
-function obtenerProyeccion(receta, proyeccionPorProducto) {
-  if (!receta.patronToken) {
-    return proyeccionPorProducto.get(receta.producto) || 0;
-  }
-  let total = 0;
-  for (const [nombre, cantidad] of proyeccionPorProducto.entries()) {
-    if (nombre.startsWith(receta.producto) && nombre.includes(receta.patronToken)) {
-      total += cantidad;
-    }
-  }
-  return total;
-}
 
 function sumarDiasYYYYMMDD(yyyymmdd, dias) {
   const d = new Date(Number(yyyymmdd.slice(0, 4)), Number(yyyymmdd.slice(4, 6)) - 1, Number(yyyymmdd.slice(6, 8)));

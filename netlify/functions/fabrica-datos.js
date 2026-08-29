@@ -4,11 +4,21 @@
 // datos externa ni cuentas de terceros:
 //
 //   - recetas: [{ producto, insumo, cantidadPorUnidad }]
-//   - stock: [{ insumo, stockActual, stockMinimo, actualizado }]
+//   - stock: [{ insumo, stockMinimo, tamanoEnvase, unidadEnvase,
+//               diasElaboracion, ultimoConteo?, ultimoConteoFecha? }]
 //
 // GET  /.netlify/functions/fabrica-datos?key=recetas
 // GET  /.netlify/functions/fabrica-datos?key=stock
 // POST /.netlify/functions/fabrica-datos   body: { key: 'recetas'|'stock', data: [...] }
+//
+// OJO: desde que existe la pestaña "Stock y mermas" (ver stock-cafeteria.js
+// y stock-calculado.js), "ultimoConteo"/"ultimoConteoFecha" son el número
+// que de verdad se usa para calcular el stock -- y solo se actualizan con
+// la acción "conteo" de stock-cafeteria.js (botón "Recontar"), NUNCA desde
+// acá. Por eso este POST los deja pasar si vienen (para no perderlos
+// cuando el frontend hace merge con lo que ya había), pero no los exige ni
+// los valida -- la pestaña "Recetas" solo edita insumo/mínimo/tamaño de
+// envase/días de elaboración.
 //
 // Requiere el paquete @netlify/blobs (npm install @netlify/blobs).
 // Usa BLOBS_SITE_ID y BLOBS_TOKEN (variables de entorno) para autenticarse
@@ -71,8 +81,11 @@ function validar(key, data) {
   }
   if (key === 'stock') {
     for (const [i, r] of data.entries()) {
-      if (!r.insumo || typeof r.stockActual !== 'number' || typeof r.stockMinimo !== 'number') {
-        return { ok: false, error: `Fila ${i + 1} de stock inválida: se espera { insumo, stockActual (número), stockMinimo (número) }` };
+      if (!r.insumo || typeof r.stockMinimo !== 'number') {
+        return { ok: false, error: `Fila ${i + 1} de stock inválida: se espera { insumo, stockMinimo (número) }` };
+      }
+      if (r.ultimoConteo != null && typeof r.ultimoConteo !== 'number') {
+        return { ok: false, error: `Fila ${i + 1} de stock inválida: ultimoConteo debe ser un número si viene.` };
       }
     }
   }
