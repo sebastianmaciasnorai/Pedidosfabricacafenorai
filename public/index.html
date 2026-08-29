@@ -1219,13 +1219,22 @@ function leerRecetas() {
 
   Object.entries(mapaPatrones).forEach(([key, filas]) => {
     const [base, token] = key.split('|||');
+    const filasValidas = [];
     filas.forEach((f) => {
       if (!f.insumo) return;
       const parsed = parseCantidad(f.cantidadTexto);
       if (parsed && parsed.valor > 0) {
-        recetas.push({ producto: base, patronToken: token, insumo: f.insumo.trim(), cantidadPorUnidad: parsed.valor, unidad: parsed.unidad });
+        filasValidas.push({ insumo: f.insumo.trim(), cantidadPorUnidad: parsed.valor, unidad: parsed.unidad });
       }
     });
+    if (filasValidas.length > 0) {
+      filasValidas.forEach((f) => recetas.push({ producto: base, patronToken: token, insumo: f.insumo, cantidadPorUnidad: f.cantidadPorUnidad, unidad: f.unidad }));
+    } else {
+      // Marcado "Sí" sin insumo -> esa variante/sabor completa viene de
+      // fábrica. Usamos "base (sabor)" como nombre del insumo para no
+      // mezclar distintos sabores de la misma familia bajo un solo nombre.
+      recetas.push({ producto: base, patronToken: token, insumo: `${base} (${token})`, cantidadPorUnidad: 1, unidad: 'un' });
+    }
   });
 
   return recetas;
