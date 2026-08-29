@@ -54,6 +54,9 @@
   /* ---- admin (recetas) ---- */
   .search{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;margin-bottom:16px;background:var(--panel);}
   .search:focus{outline:none;border-color:var(--accent);}
+  .admin-toolbar{margin-bottom:16px;}
+  .admin-toolbar .search{margin-bottom:8px;}
+  .admin-toolbar-botones{display:flex;gap:8px;flex-wrap:wrap;}
   .categoria{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden;}
   .categoria-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;user-select:none;}
   .categoria-header h2{font-size:14px;margin:0;}
@@ -166,7 +169,15 @@
   <p class="sub" style="margin-top:-14px;"><strong>Tip:</strong> si el producto completo se elabora en fábrica (ej: un galletón), márcalo y deja el insumo en blanco. Si solo una parte usa un insumo de fábrica (ej: un plato con "lomo vetado sous vide"), escribe ese insumo específico y cuánto usa.</p>
 
   <div id="loading-admin">Cargando productos desde Toteat...</div>
-  <input type="text" class="search" id="buscador" placeholder="Buscar producto..." style="display:none">
+  <div class="admin-toolbar" id="admin-toolbar" style="display:none;">
+    <input type="text" class="search" id="buscador" placeholder="Buscar producto...">
+    <div class="admin-toolbar-botones">
+      <button class="add" id="btn-expandir-todo">Expandir todas</button>
+      <button class="add" id="btn-descargar-excel">⬇️ Descargar Excel</button>
+      <button class="add" id="btn-subir-excel">⬆️ Subir Excel</button>
+      <input type="file" id="input-excel" accept=".xlsx,.xls" style="display:none">
+    </div>
+  </div>
   <div id="categorias"></div>
 
   <section class="stock" id="seccion-stock" style="display:none">
@@ -188,6 +199,7 @@
   <span class="status" id="status"></span>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 // ===================== TABS =====================
 const tabButtons = document.querySelectorAll('.tab-btn');
@@ -457,7 +469,7 @@ function cargarAdmin() {
       document.getElementById('status').className = 'status ok';
     }
 
-    document.getElementById('buscador').style.display = 'block';
+    document.getElementById('admin-toolbar').style.display = 'block';
     document.getElementById('seccion-stock').style.display = 'block';
     renderCategorias();
     renderStock();
@@ -690,6 +702,138 @@ function formatCantidad(valor, unidad) {
 }
 
 document.getElementById('buscador').addEventListener('input', (e) => renderCategorias(e.target.value));
+
+// ===================== EXPANDIR/COLAPSAR TODAS LAS CATEGORÍAS =====================
+let todasLasCategoriasAbiertas = false;
+document.getElementById('btn-expandir-todo').addEventListener('click', () => {
+  todasLasCategoriasAbiertas = !todasLasCategoriasAbiertas;
+  document.querySelectorAll('#categorias .categoria').forEach((div) => {
+    div.classList.toggle('abierta', todasLasCategoriasAbiertas);
+  });
+  document.getElementById('btn-expandir-todo').textContent = todasLasCategoriasAbiertas ? 'Colapsar todas' : 'Expandir todas';
+});
+
+// ===================== EXCEL: DESCARGAR TODOS LOS PRODUCTOS =====================
+// Arma una fila por producto (y por cada sabor/variante agrupada). Si un
+// producto ya tiene insumos marcados, se repite una fila por cada insumo.
+// Así el archivo se puede editar afuera y volver a subir para marcar/
+// desmarcar productos de fábrica mucho más rápido que clic a clic aquí.
+function filasParaExcelProducto(cat, nombreProducto, variante, entradas, unidadesVendidas) {
+  const base = {
+    'Categoría': cat.categoria,
+    'Producto': nombreProducto,
+    'Variante': variante || '',
+    'Unidades vendidas (7 días)': unidadesVendidas,
+  };
+  if (entradas && entradas.length) {
+    return entradas.map((e) => Object.assign({}, base, {
+      'Contiene producto de fábrica': 'Sí',
+      'Insumo': e.insumo || '',
+      'Cantidad': e.cantidadTexto || '',
+    }));
+  }
+  return [Object.assign({}, base, { 'Contiene producto de fábrica': 'No', 'Insumo': '', 'Cantidad': '' })];
+}
+
+function generarFilasExcel() {
+  const filas = [];
+  categorias.forEach((cat) => {
+    cat.productos.forEach((p) => {
+      filas.push(...filasParaExcelProducto(cat, p.producto, '', mapaInsumos[p.producto], p.unidadesVendidas));
+    });
+    (cat.familias || []).forEach((fam) => {
+      fam.tokens.forEach((tok) => {
+        const key = fam.base + '|||' + tok.token;
+        filas.push(...filasParaExcelProducto(cat, fam.base, tok.token, mapaPatrones[key], tok.unidadesVendidas));
+      });
+    });
+  });
+  return filas;
+}
+
+document.getElementById('btn-descargar-excel').addEventListener('click', () => {
+  if (!categorias.length) {
+    alert('Espera a que terminen de cargar los productos.');
+    return;
+  }
+  const filas = generarFilasExcel();
+  const columnas = ['Categoría', 'Producto', 'Variante', 'Contiene producto de fábrica', 'Insumo', 'Cantidad', 'Unidades vendidas (7 días)'];
+  const hoja = XLSX.utils.json_to_sheet(filas, { header: columnas });
+  hoja['!cols'] = [{ wch: 16 }, { wch: 34 }, { wch: 18 }, { wch: 16 }, { wch: 34 }, { wch: 12 }, { wch: 14 }];
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Recetas y stock');
+  const fechaHoy = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(libro, `recetas-fabrica-${fechaHoy}.xlsx`);
+});
+
+// ===================== EXCEL: SUBIR (marca/desmarca en bloque) =====================
+function esSi(valor) {
+  const s = String(valor || '').trim().toLowerCase();
+  return s === 'si' || s === 'sí' || s === 'x' || s === 'yes' || s === 'true' || s === '1';
+}
+
+// Solo toca los productos/variantes que aparecen en el Excel: "Sí" los marca
+// (con el insumo/cantidad que diga el archivo, o "producto completo" si esas
+// celdas quedaron vacías) y "No" los desmarca. Lo que no aparezca en el
+// archivo queda tal cual estaba -- así no hace falta exportar/reimportar
+// todo cada vez.
+function aplicarFilasExcel(filas) {
+  const grupos = new Map();
+  filas.forEach((fila) => {
+    const producto = String(fila['Producto'] || '').trim();
+    if (!producto) return;
+    const variante = String(fila['Variante'] || '').trim();
+    const key = (variante ? 'patron:' : 'prod:') + producto + '|||' + variante;
+    if (!grupos.has(key)) grupos.set(key, { producto, variante, contiene: false, entradas: [] });
+    const grupo = grupos.get(key);
+    if (esSi(fila['Contiene producto de fábrica'])) grupo.contiene = true;
+    const insumo = String(fila['Insumo'] || '').trim();
+    const cantidadTexto = String(fila['Cantidad'] || '').trim();
+    if (insumo) grupo.entradas.push({ insumo, cantidadTexto });
+  });
+
+  let marcados = 0, desmarcados = 0;
+  grupos.forEach((grupo) => {
+    const destino = grupo.variante ? mapaPatrones : mapaInsumos;
+    const destKey = grupo.variante ? (grupo.producto + '|||' + grupo.variante) : grupo.producto;
+    if (grupo.contiene) {
+      destino[destKey] = grupo.entradas.length ? grupo.entradas : [{ insumo: '', cantidadTexto: '' }];
+      marcados++;
+    } else if (destino[destKey]) {
+      delete destino[destKey];
+      desmarcados++;
+    }
+  });
+  return { marcados, desmarcados };
+}
+
+document.getElementById('btn-subir-excel').addEventListener('click', () => {
+  document.getElementById('input-excel').click();
+});
+
+document.getElementById('input-excel').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ''; // permite volver a subir el mismo archivo si se corrige algo
+  if (!file) return;
+
+  const statusEl = document.getElementById('status');
+  try {
+    const buffer = await file.arrayBuffer();
+    const libro = XLSX.read(buffer, { type: 'array' });
+    const hoja = libro.Sheets[libro.SheetNames[0]];
+    const filas = XLSX.utils.sheet_to_json(hoja, { defval: '' });
+    const { marcados, desmarcados } = aplicarFilasExcel(filas);
+
+    renderCategorias(document.getElementById('buscador').value);
+    guardarBorradorDebounced();
+    document.getElementById('barra-guardar').classList.add('visible');
+    statusEl.textContent = `Excel importado: ${marcados} producto(s)/variante(s) marcados, ${desmarcados} desmarcados. Revisa los cambios y presiona "Guardar todo" para confirmarlos.`;
+    statusEl.className = 'status ok';
+  } catch (err) {
+    statusEl.textContent = 'Error leyendo el Excel: ' + err.message;
+    statusEl.className = 'status err';
+  }
+});
 
 function filaStock(r = {}) {
   const tr = document.createElement('tr');
