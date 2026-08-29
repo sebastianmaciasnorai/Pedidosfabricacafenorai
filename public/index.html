@@ -90,6 +90,19 @@
   button.icon{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:4px;}
   #loading-admin{color:var(--ink-soft);font-size:13px;padding:20px 0;}
 
+  /* ---- stock y mermas ---- */
+  .formula-hint{font-size:10.5px;color:var(--ink-soft);font-family:"JetBrains Mono",monospace;}
+  button.chico{border:1px solid var(--line);background:#fff;color:var(--ink-soft);font-size:11px;font-weight:600;padding:4px 8px;border-radius:6px;cursor:pointer;}
+  button.chico:hover{border-color:var(--accent);color:var(--accent);}
+  .merma-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);}
+  .merma-form select{flex:1;min-width:160px;border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-family:inherit;font-size:13px;background:#fff;}
+  .merma-form input[type="text"]{flex:1;min-width:140px;}
+  .merma-form input{border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-family:"JetBrains Mono",monospace;font-size:12.5px;background:#fff;}
+  .merma-form input[type="number"]{width:100px;}
+  .log-mermas{margin-top:12px;font-size:12px;color:var(--ink-soft);}
+  .log-mermas div{padding:4px 0;border-bottom:1px dashed var(--line);}
+  #loading-stock{color:var(--ink-soft);font-size:13px;padding:20px 0;}
+
   .barra-guardar{
     position:fixed;bottom:0;left:0;right:0;background:var(--panel);
     border-top:1px solid var(--line);padding:12px 16px;display:none;gap:10px;align-items:center;
@@ -109,7 +122,8 @@
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
-    <button class="tab-btn" data-tab="admin">Recetas y stock</button>
+    <button class="tab-btn" data-tab="stock">Stock y mermas</button>
+    <button class="tab-btn" data-tab="admin">Recetas</button>
   </div>
 </header>
 
@@ -140,6 +154,19 @@
       <tbody id="tbody-detalle"></tbody>
     </table>
   </section>
+
+  <section id="seccion-recepcion" style="display:none">
+    <h2>¿Llegó el pedido de fábrica hoy?</h2>
+    <p class="sub" style="margin-bottom:10px;">Confirma lo que efectivamente llegó (edítalo si vino distinto a lo pedido). Es lo único manual que hay que hacer al recibir el pedido -- el resto del stock se recalcula solo en "Stock y mermas".</p>
+    <table>
+      <thead><tr><th>Insumo</th><th class="num">Sugerido pedir</th><th class="num">Llegó</th></tr></thead>
+      <tbody id="tbody-recepcion"></tbody>
+    </table>
+    <div class="toolbar">
+      <button class="save" id="btn-confirmar-recepcion">✅ Confirmar recepción de hoy</button>
+      <span class="status" id="status-recepcion"></span>
+    </div>
+  </section>
 </div>
 
 <!-- ================= TAB: POR EMPEZAR A FABRICAR ================= -->
@@ -163,7 +190,31 @@
   </section>
 </div>
 
-<!-- ================= TAB: ADMIN (recetas/stock) ================= -->
+<!-- ================= TAB: STOCK Y MERMAS ================= -->
+<div class="tab-panel" id="tab-stock">
+  <p class="sub">Stock calculado automáticamente: <strong>último conteo real + recepciones − vendido (Toteat, automático) − mermas registradas</strong>. No hace falta contar todo cada día -- solo anota mermas y confirma cuando llega el pedido de fábrica. Pasa el mouse sobre el stock calculado para ver el detalle.</p>
+  <div id="loading-stock">Calculando...</div>
+  <section id="seccion-stock-calculado" style="display:none">
+    <h2>Stock calculado por insumo</h2>
+    <table>
+      <thead>
+        <tr><th>Insumo</th><th class="num">Último conteo</th><th class="num">Stock calculado</th><th class="num">Mínimo</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody id="tbody-stock-calculado"></tbody>
+    </table>
+
+    <div class="merma-form">
+      <select id="merma-insumo"></select>
+      <input type="number" id="merma-cantidad" placeholder="Cantidad" step="0.1">
+      <input type="text" id="merma-motivo" placeholder="Motivo (opcional): se quemó, se cayó...">
+      <button class="save" id="btn-guardar-merma">+ Registrar merma</button>
+      <span class="status" id="status-merma"></span>
+    </div>
+    <div class="log-mermas" id="log-mermas"></div>
+  </section>
+</div>
+
+<!-- ================= TAB: ADMIN (recetas) ================= -->
 <div class="tab-panel" id="tab-admin">
   <p class="sub">Marca los productos que vienen de fábrica (completos o en parte) y dile cuánto insumo consume cada unidad vendida. La lista viene directo de tus ventas de Toteat de los últimos 7 días.</p>
   <p class="sub" style="margin-top:-14px;"><strong>Tip:</strong> si el producto completo se elabora en fábrica (ej: un galletón), márcalo y deja el insumo en blanco. Si solo una parte usa un insumo de fábrica (ej: un plato con "lomo vetado sous vide"), escribe ese insumo específico y cuánto usa.</p>
@@ -181,10 +232,10 @@
   <div id="categorias"></div>
 
   <section class="stock" id="seccion-stock" style="display:none">
-    <h2>Stock de insumos</h2>
-    <p class="hint">Stock actual y mínimo, medidos en <strong>envases</strong> (como te los manda la fábrica). "Tamaño envase" es cuánto trae cada envase, en la MISMA unidad que uses en las recetas de arriba. "Días elaborac." es cuántos días se demora la fábrica en tener listo ESE insumo (ej: 3 para un brownie que se hornea, se enfría y se corta al otro día) -- déjalo en 0 si se puede reponer el mismo día. Con eso, la pestaña "Por empezar a fabricar" te avisa con anticipación.</p>
+    <h2>Insumos de fábrica (configuración)</h2>
+    <p class="hint">Esto es solo configuración -- se toca cuando cambia el menú, no día a día. El stock en vivo (cuánto hay ahora) y las mermas se manejan en la pestaña "Stock y mermas". "Tamaño envase" es cuánto trae cada envase, en la MISMA unidad que uses en las recetas de arriba. "Días elaborac." es cuántos días se demora la fábrica en tener listo ESE insumo (ej: 3 para un brownie que se hornea, se enfría y se corta al otro día) -- déjalo en 0 si se puede reponer el mismo día. Con eso, la pestaña "Por empezar a fabricar" te avisa con anticipación.</p>
     <table id="tabla-stock">
-      <thead><tr><th>Insumo</th><th style="width:80px">Días elaborac.</th><th style="width:80px">Tamaño envase</th><th style="width:80px">Stock (envases)</th><th style="width:80px">Mínimo (envases)</th><th style="width:30px"></th></tr></thead>
+      <thead><tr><th>Insumo</th><th style="width:80px">Días elaborac.</th><th style="width:80px">Tamaño envase</th><th style="width:80px">Mínimo (envases)</th><th style="width:30px"></th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="toolbar">
@@ -206,6 +257,7 @@ const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 let adminCargado = false;
 let fabricarCargado = false;
+let stockCargado = false;
 
 tabButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -224,6 +276,10 @@ tabButtons.forEach((btn) => {
     if (btn.dataset.tab === 'fabricar' && !fabricarCargado) {
       fabricarCargado = true;
       cargarFabricar();
+    }
+    if (btn.dataset.tab === 'stock' && !stockCargado) {
+      stockCargado = true;
+      cargarStock();
     }
   });
 });
@@ -319,6 +375,22 @@ tabButtons.forEach((btn) => {
           tbody.appendChild(tr);
         });
       }
+
+      // "¿Llegó el pedido de fábrica hoy?" -- solo los insumos que
+      // efectivamente se sugirió pedir, precargados con esa cantidad.
+      const paraRecibir = detalle.filter((d) => d.sugeridoPedirAFabrica > 0);
+      const seccionRecepcion = document.getElementById('seccion-recepcion');
+      if (paraRecibir.length) {
+        seccionRecepcion.style.display = 'block';
+        document.getElementById('tbody-recepcion').innerHTML = paraRecibir.map((d) => `
+          <tr>
+            <td class="nombre">${d.insumo}</td>
+            <td class="num">${d.sugeridoPedirAFabrica} ${d.tamanoEnvase > 1 ? '(envases)' : ''}</td>
+            <td class="num"><input type="number" step="0.1" data-insumo="${escapeAttr(d.insumo)}" value="${d.sugeridoPedirAFabrica}"></td>
+          </tr>`).join('');
+      } else {
+        seccionRecepcion.style.display = 'none';
+      }
     } catch (e) {
       loading.style.display = 'block';
       loading.textContent = 'Error de conexión: ' + e.message;
@@ -332,6 +404,36 @@ tabButtons.forEach((btn) => {
     await cargar();
     btnActualizar.textContent = textoOriginal;
     btnActualizar.disabled = false;
+  });
+
+  document.getElementById('btn-confirmar-recepcion').addEventListener('click', async () => {
+    const items = [...document.querySelectorAll('#tbody-recepcion input[type="number"]')]
+      .map((input) => ({ insumo: input.dataset.insumo, cantidad: Number(input.value) }))
+      .filter((it) => it.cantidad > 0);
+    const statusEl = document.getElementById('status-recepcion');
+    if (!items.length) {
+      statusEl.textContent = 'No hay nada que confirmar.';
+      statusEl.className = 'status err';
+      return;
+    }
+    statusEl.textContent = 'Guardando...';
+    statusEl.className = 'status';
+    try {
+      const res = await fetch('/.netlify/functions/stock-cafeteria', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'recepcion', items }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Error desconocido');
+      statusEl.textContent = `Recepción registrada (${json.guardado} insumo(s)). Revisa el detalle en "Stock y mermas".`;
+      statusEl.className = 'status ok';
+      stockCargado = false; // para que "Stock y mermas" recalcule al abrirla de nuevo
+      await cargar(); // refresca "Pedido de hoy" con el stock ya actualizado
+    } catch (e) {
+      statusEl.textContent = 'Error: ' + e.message;
+      statusEl.className = 'status err';
+    }
   });
 
   cargar();
@@ -386,6 +488,122 @@ async function cargarFabricar() {
     loading.textContent = 'Error de conexión: ' + e.message;
   }
 }
+
+// ===================== STOCK Y MERMAS =====================
+let stockData = [];
+
+async function cargarStock() {
+  const loading = document.getElementById('loading-stock');
+  loading.style.display = 'block';
+  loading.textContent = 'Calculando...';
+  try {
+    const res = await fetch('/.netlify/functions/stock-cafeteria');
+    const json = await res.json();
+    loading.style.display = 'none';
+
+    if (!json.ok) {
+      loading.style.display = 'block';
+      loading.textContent = 'Error: ' + (json.error || 'desconocido');
+      return;
+    }
+    if (json.nota) {
+      loading.style.display = 'block';
+      loading.textContent = json.nota;
+      return;
+    }
+
+    stockData = json.items || [];
+    document.getElementById('seccion-stock-calculado').style.display = 'block';
+    renderStockCalculado();
+    renderLogMermas(json.mermasHoy || []);
+  } catch (e) {
+    loading.style.display = 'block';
+    loading.textContent = 'Error de conexión: ' + e.message;
+  }
+}
+
+function renderStockCalculado() {
+  const tbody = document.getElementById('tbody-stock-calculado');
+  tbody.innerHTML = stockData.map((s) => {
+    const formula = `${s.ultimoConteo} (${s.ultimoConteoFecha}) + ${s.recibido} recibido − ${s.vendido} vendido − ${s.merma} merma`;
+    return `<tr class="${s.bajoMinimo ? 'bajo-minimo' : ''}">
+      <td class="nombre">${s.insumo}</td>
+      <td class="num">${s.ultimoConteo} ${s.unidadEnvase}</td>
+      <td class="num" title="${escapeAttr(formula)}">${s.stockCalculado} ${s.unidadEnvase}<br><span class="formula-hint">${formula}</span></td>
+      <td class="num">${s.stockMinimo} ${s.unidadEnvase}</td>
+      <td>${s.bajoMinimo ? '<span class="pill pedir">Bajo mínimo</span>' : '<span class="pill ok">OK</span>'}</td>
+      <td><button class="chico" data-recontar="${escapeAttr(s.insumo)}">Recontar</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('merma-insumo').innerHTML = stockData
+    .map((s) => `<option value="${escapeAttr(s.insumo)}">${s.insumo}</option>`).join('');
+
+  tbody.querySelectorAll('[data-recontar]').forEach((btn) => {
+    btn.addEventListener('click', () => recontarInsumo(btn.dataset.recontar));
+  });
+}
+
+function renderLogMermas(mermasHoy) {
+  const cont = document.getElementById('log-mermas');
+  if (!mermasHoy.length) {
+    cont.innerHTML = '<div>Sin mermas registradas hoy.</div>';
+    return;
+  }
+  cont.innerHTML = '<strong style="color:var(--ink);">Mermas de hoy:</strong>' + mermasHoy.map((m) => {
+    const hora = (m.fecha || '').slice(11, 16);
+    return `<div>${hora} · ${m.insumo} · ${m.cantidad}${m.motivo ? ' · ' + escapeAttr(m.motivo) : ''}</div>`;
+  }).join('');
+}
+
+async function recontarInsumo(insumo) {
+  const actual = stockData.find((s) => s.insumo === insumo);
+  const nuevo = prompt(`Conteo real de "${insumo}"${actual ? ' (' + actual.unidadEnvase + ')' : ''}:`, actual ? actual.stockCalculado : '');
+  if (nuevo === null || nuevo.trim() === '' || isNaN(Number(nuevo)) || Number(nuevo) < 0) return;
+  try {
+    const res = await fetch('/.netlify/functions/stock-cafeteria', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'conteo', insumo, valor: Number(nuevo) }),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+    await cargarStock();
+  } catch (e) {
+    alert('No se pudo actualizar el conteo: ' + e.message);
+  }
+}
+
+document.getElementById('btn-guardar-merma').addEventListener('click', async () => {
+  const insumo = document.getElementById('merma-insumo').value;
+  const cantidad = Number(document.getElementById('merma-cantidad').value);
+  const motivo = document.getElementById('merma-motivo').value.trim();
+  const statusEl = document.getElementById('status-merma');
+  if (!insumo || !(cantidad > 0)) {
+    statusEl.textContent = 'Elige un insumo e ingresa una cantidad válida.';
+    statusEl.className = 'status err';
+    return;
+  }
+  statusEl.textContent = 'Guardando...';
+  statusEl.className = 'status';
+  try {
+    const res = await fetch('/.netlify/functions/stock-cafeteria', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'merma', insumo, cantidad, motivo }),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+    document.getElementById('merma-cantidad').value = '';
+    document.getElementById('merma-motivo').value = '';
+    statusEl.textContent = 'Merma registrada.';
+    statusEl.className = 'status ok';
+    await cargarStock();
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'status err';
+  }
+});
 
 // ===================== RECETAS Y STOCK =====================
 let categorias = [];
@@ -464,7 +682,27 @@ function cargarAdmin() {
     if (borrador) {
       if (borrador.mapaInsumos) mapaInsumos = borrador.mapaInsumos;
       if (borrador.mapaPatrones) mapaPatrones = borrador.mapaPatrones;
-      if (borrador.stock && borrador.stock.length) stockFilas = borrador.stock;
+      if (borrador.stock && borrador.stock.length) {
+        // El borrador solo guarda lo que esta pestaña edita (insumo, días
+        // elaboración, tamaño envase, mínimo) -- el conteo real
+        // (ultimoConteo/ultimoConteoFecha) se recupera de lo que acaba de
+        // traer el servidor, para no perderlo al restaurar el borrador.
+        const servidorPorInsumo = new Map(stockFilas.map((f) => [f.insumo, f]));
+        stockFilas = borrador.stock.map((fBorrador) => {
+          const parsed = parseCantidad(fBorrador.tamanoEnvaseTexto) || { valor: 1, unidad: 'un' };
+          const servidor = servidorPorInsumo.get(fBorrador.insumo);
+          return {
+            insumo: fBorrador.insumo,
+            diasElaboracion: Number(fBorrador.diasElaboracion) || 0,
+            stockMinimo: Number(fBorrador.stockMinimo) || 0,
+            tamanoEnvase: parsed.valor,
+            unidadEnvase: parsed.unidad,
+            ultimoConteo: servidor ? servidor.ultimoConteo : undefined,
+            ultimoConteoFecha: servidor ? servidor.ultimoConteoFecha : undefined,
+            stockActual: servidor ? servidor.stockActual : undefined,
+          };
+        });
+      }
       document.getElementById('status').textContent = 'Se restauraron cambios sin guardar de la sesión anterior.';
       document.getElementById('status').className = 'status ok';
     }
@@ -842,7 +1080,6 @@ function filaStock(r = {}) {
     <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}"></td>
     <td><input type="number" step="1" min="0" data-field="diasElaboracion" value="${r.diasElaboracion ?? 0}"></td>
     <td><input type="text" data-field="tamanoEnvaseTexto" placeholder="1000 g / 1 un" value="${escapeAttr(envaseTexto)}"></td>
-    <td><input type="number" step="0.1" data-field="stockActual" value="${r.stockActual ?? ''}"></td>
     <td><input type="number" step="0.1" data-field="stockMinimo" value="${r.stockMinimo ?? ''}"></td>
     <td><button class="icon" data-remove>✕</button></td>
   `;
@@ -861,7 +1098,14 @@ function renderStock() {
 // Relee lo que hay ahora mismo en la tabla (sin filtrar filas vacías, para
 // no perder una fila que el usuario recién está llenando) y la vuelve a
 // pintar ordenada alfabéticamente por insumo.
+//
+// OJO: esta tabla ya no muestra "último conteo" (se calcula en "Stock y
+// mermas"), pero cada fila SÍ lo tiene guardado en `stockFilas`. Si acá
+// reconstruyéramos las filas solo con lo que hay en el DOM, ese conteo se
+// perdería (quedaría como si nunca se hubiera contado). Por eso se
+// recupera de `stockFilas` por nombre de insumo antes de repintar.
 function ordenarTablaStock() {
+  const stockOriginalPorInsumo = new Map(stockFilas.map((f) => [f.insumo, f]));
   const filas = [...document.querySelectorAll('#tabla-stock tbody tr')];
   const datos = filas.map((tr) => {
     const obj = {};
@@ -872,6 +1116,12 @@ function ordenarTablaStock() {
         obj[input.dataset.field] = input.value;
       }
     });
+    const original = stockOriginalPorInsumo.get(obj.insumo);
+    if (original) {
+      obj.ultimoConteo = original.ultimoConteo;
+      obj.ultimoConteoFecha = original.ultimoConteoFecha;
+      obj.stockActual = original.stockActual;
+    }
     return obj;
   });
   datos.sort((a, b) => String(a.insumo || '').localeCompare(String(b.insumo || ''), 'es', { sensitivity: 'base' }));
@@ -917,7 +1167,15 @@ document.body.addEventListener('click', (e) => {
   if (e.target.matches('[data-remove]')) e.target.closest('tr').remove();
 });
 
+// El conteo real (ultimoConteo/ultimoConteoFecha) NO se edita en esta
+// pestaña -- se recupera del insumo original (por nombre) para no perder
+// el punto de partida del cálculo de stock al guardar. Un insumo nuevo
+// simplemente arranca sin conteo (conviene hacer un "Recontar" en "Stock y
+// mermas" apenas se agregue). Si se le cambia el nombre a un insumo
+// existente, se trata como uno nuevo -- pierde su conteo anterior, ya que
+// ese historial estaba atado al nombre viejo.
 function leerStockTabla() {
+  const stockOriginalPorInsumo = new Map(stockFilas.map((f) => [f.insumo, f]));
   const filas = [...document.querySelectorAll('#tabla-stock tbody tr')];
   return filas.map((tr) => {
     const obj = {};
@@ -929,6 +1187,14 @@ function leerStockTabla() {
     const parsed = parseCantidad(envaseInput ? envaseInput.value : '') || { valor: 1, unidad: 'un' };
     obj.tamanoEnvase = parsed.valor;
     obj.unidadEnvase = parsed.unidad;
+
+    const original = stockOriginalPorInsumo.get(obj.insumo);
+    if (original && original.ultimoConteo != null) {
+      obj.ultimoConteo = original.ultimoConteo;
+      obj.ultimoConteoFecha = original.ultimoConteoFecha;
+    } else if (original && original.stockActual != null) {
+      obj.stockActual = original.stockActual; // compatibilidad: fila vieja nunca recontada todavía
+    }
     return obj;
   }).filter((o) => o.insumo);
 }
