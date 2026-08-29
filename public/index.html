@@ -378,6 +378,7 @@ async function cargarFabricar() {
 // ===================== RECETAS Y STOCK =====================
 let categorias = [];
 let mapaInsumos = {};
+let mapaPatrones = {};
 let stockFilas = [];
 
 function cargarAdmin() {
@@ -403,8 +404,14 @@ function cargarAdmin() {
     stockFilas = (resStock.data || []);
 
     (resRecetas.data || []).forEach((r) => {
-      if (!mapaInsumos[r.producto]) mapaInsumos[r.producto] = [];
-      mapaInsumos[r.producto].push({ insumo: r.insumo, cantidadTexto: formatCantidad(r.cantidadPorUnidad, r.unidad || 'un') });
+      if (r.patronToken) {
+        const key = r.producto + '|||' + r.patronToken;
+        if (!mapaPatrones[key]) mapaPatrones[key] = [];
+        mapaPatrones[key].push({ insumo: r.insumo, cantidadTexto: formatCantidad(r.cantidadPorUnidad, r.unidad || 'un') });
+      } else {
+        if (!mapaInsumos[r.producto]) mapaInsumos[r.producto] = [];
+        mapaInsumos[r.producto].push({ insumo: r.insumo, cantidadTexto: formatCantidad(r.cantidadPorUnidad, r.unidad || 'un') });
+      }
     });
 
     document.getElementById('buscador').style.display = 'block';
@@ -436,11 +443,107 @@ function renderCategorias(filtro = '') {
 
     const body = div.querySelector('.categoria-body');
     productosFiltrados.forEach((p) => body.appendChild(renderProducto(p)));
+
+    if (!f && cat.familias && cat.familias.length) {
+      const divisor = document.createElement('div');
+      divisor.style.cssText = 'padding:10px 14px;background:#F4FAFB;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.03em;';
+      divisor.textContent = 'Sabores/variantes agrupadas (suman todas las combinaciones)';
+      body.appendChild(divisor);
+      cat.familias.forEach((fam) => body.appendChild(renderFamilia(fam)));
+    }
   });
 
   cont.querySelectorAll('.categoria-header').forEach((h) => {
     h.addEventListener('click', () => h.closest('.categoria').classList.toggle('abierta'));
   });
+}
+
+// Una "familia" es un grupo de productos que comparten el mismo nombre
+// base y solo cambian en el sabor/variante entre paréntesis (ej: "Club
+// Desayuno Muffin"). Cada "token" es un sabor específico (ej: "M.
+// Arándano") -- al marcarlo, la receta va a sumar TODAS las combinaciones
+// que incluyan ese sabor, sin importar el resto de los modificadores.
+function renderFamilia(fam) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:8px 14px 4px;';
+  const titulo = document.createElement('div');
+  titulo.style.cssText = 'font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:2px;';
+  titulo.textContent = fam.base;
+  wrap.appendChild(titulo);
+
+  fam.tokens.forEach((tok) => {
+    const key = fam.base + '|||' + tok.token;
+    wrap.appendChild(renderTokenRow(fam.base, tok, key));
+  });
+  return wrap;
+}
+
+function renderTokenRow(base, tok, key) {
+  const marcado = !!mapaPatrones[key];
+  const row = document.createElement('div');
+  row.className = 'producto-row' + (marcado ? ' marcado' : '');
+  row.style.marginLeft = '10px';
+
+  row.innerHTML = `
+    <div class="producto-top">
+      <input type="checkbox" ${marcado ? 'checked' : ''}>
+      <label>🏷️ ${tok.token}</label>
+      <span class="vendidos">${tok.unidadesVendidas} u. · $${formatoMonto(tok.ventaTotal)} · 7 días</span>
+    </div>
+    <div class="insumos-box"></div>
+  `;
+
+  const checkbox = row.querySelector('input[type="checkbox"]');
+  const insumosBox = row.querySelector('.insumos-box');
+
+  function pintarInsumos() {
+    insumosBox.innerHTML = '';
+    const filas = mapaPatrones[key] || [];
+    filas.forEach((f, idx) => insumosBox.appendChild(filaInsumoPatron(key, idx, f)));
+    const btn = document.createElement('button');
+    btn.className = 'add-insumo';
+    btn.textContent = '+ insumo';
+    btn.addEventListener('click', () => {
+      mapaPatrones[key] = mapaPatrones[key] || [];
+      mapaPatrones[key].push({ insumo: '', cantidadTexto: '' });
+      pintarInsumos();
+    });
+    insumosBox.appendChild(btn);
+  }
+
+  function filaInsumoPatron(key, idx, f) {
+    const fila = document.createElement('div');
+    fila.className = 'insumo-fila';
+    fila.innerHTML = `
+      <input type="text" placeholder="Insumo" value="${escapeAttr(f.insumo)}">
+      <input type="text" placeholder="100 g / 1 un" value="${escapeAttr(f.cantidadTexto || '')}" style="flex:1;text-align:right;">
+      <button title="Quitar">✕</button>
+    `;
+    const [inputInsumo, inputCant] = fila.querySelectorAll('input');
+    inputInsumo.addEventListener('input', () => { mapaPatrones[key][idx].insumo = inputInsumo.value; });
+    inputCant.addEventListener('input', () => { mapaPatrones[key][idx].cantidadTexto = inputCant.value; });
+    fila.querySelector('button').addEventListener('click', () => {
+      mapaPatrones[key].splice(idx, 1);
+      if (mapaPatrones[key].length === 0) delete mapaPatrones[key];
+      pintarInsumos();
+    });
+    return fila;
+  }
+
+  if (marcado) pintarInsumos();
+
+  checkbox.addEventListener('change', () => {
+    if (checkbox.checked) {
+      row.classList.add('marcado');
+      if (!mapaPatrones[key]) mapaPatrones[key] = [{ insumo: '', cantidadTexto: '' }];
+      pintarInsumos();
+    } else {
+      row.classList.remove('marcado');
+      delete mapaPatrones[key];
+    }
+  });
+
+  return row;
 }
 
 function renderProducto(p) {
@@ -599,6 +702,9 @@ document.getElementById('btn-sync-stock').addEventListener('click', () => {
       insumosEnUso.add(producto);
     }
   });
+  Object.values(mapaPatrones).forEach((filas) => {
+    filas.forEach((f) => { if (f.insumo) insumosEnUso.add(f.insumo); });
+  });
   const yaEnStock = new Set([...document.querySelectorAll('#tabla-stock [data-field="insumo"]')].map((i) => i.value));
   const tbody = document.querySelector('#tabla-stock tbody');
   let agregados = 0;
@@ -612,6 +718,7 @@ document.getElementById('btn-sync-stock').addEventListener('click', () => {
     ? `${agregados} insumo(s) agregado(s) al stock, completa las cantidades.`
     : 'No hay insumos nuevos para agregar.';
   document.getElementById('status').className = 'status ok';
+  if (agregados) ordenarTablaStock();
 });
 
 document.body.addEventListener('click', (e) => {
@@ -651,6 +758,18 @@ function leerRecetas() {
       recetas.push({ producto, insumo: producto, cantidadPorUnidad: 1, unidad: 'un' });
     }
   });
+
+  Object.entries(mapaPatrones).forEach(([key, filas]) => {
+    const [base, token] = key.split('|||');
+    filas.forEach((f) => {
+      if (!f.insumo) return;
+      const parsed = parseCantidad(f.cantidadTexto);
+      if (parsed && parsed.valor > 0) {
+        recetas.push({ producto: base, patronToken: token, insumo: f.insumo.trim(), cantidadPorUnidad: parsed.valor, unidad: parsed.unidad });
+      }
+    });
+  });
+
   return recetas;
 }
 
