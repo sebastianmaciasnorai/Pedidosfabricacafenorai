@@ -111,4 +111,9 @@ function yyyymmddToISO(s) {
   return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
 }
 
-module.exports = { obtenerVentasConCache };
+module.exports = { obtenerVentasConCache, leerHistorialGuardado };
+
+async function leerHistorialGuardado() {
+  const store = getBlobStore();
+  return (await store.get(KEY_HISTORIAL, { type: 'json' })) || [];
+}
