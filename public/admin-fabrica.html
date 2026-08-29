@@ -207,7 +207,7 @@ function renderProducto(p) {
     <div class="producto-top">
       <input type="checkbox" ${marcado ? 'checked' : ''}>
       <label>${p.producto}</label>
-      <span class="vendidos">${p.unidadesVendidas} u. · $${formatoMonto(p.ventaTotal)} · 7 días</span>
+      <span class="vendidos">${p.unidadesVendidas} u. · $${formatoMonto(p.precioUnitario)} c/u · 7 días</span>
     </div>
     <div class="insumos-box"></div>
   `;
