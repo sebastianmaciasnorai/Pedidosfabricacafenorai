@@ -64,14 +64,24 @@ exports.handler = async (event) => {
     }
   }
 
+  const resumenPorSabor = {};
+  conSabor.forEach((v) => {
+    resumenPorSabor[v.sabor] = (resumenPorSabor[v.sabor] || 0) + 1;
+  });
+  const proporcionPorSabor = {};
+  Object.entries(resumenPorSabor).forEach(([sabor, cantidad]) => {
+    proporcionPorSabor[sabor] = conSabor.length > 0 ? Math.round((cantidad / conSabor.length) * 1000) / 10 : 0;
+  });
+
   return jsonResponse(200, {
     ok: true,
     producto: qs.producto || 'Tartaleta',
     rangoDias: dias,
     totalConSabor: conSabor.length,
     totalSinSabor: sinSabor.length,
+    resumenPorSabor,
+    proporcionPorSaborEnPorcentaje: proporcionPorSabor,
     ventasSinSabor: sinSabor,
-    ejemploConSabor: conSabor.slice(0, 5),
     diasConError: diasConError.length ? diasConError : undefined,
   });
 };
