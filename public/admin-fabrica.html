@@ -6,272 +6,360 @@
 <title>Fábrica · Recetas y stock</title>
 <style>
   :root{
-    --bg:#EDEFF2;
-    --panel:#FFFFFF;
-    --ink:#1B1F23;
-    --ink-soft:#5B6472;
-    --line:#D7DBE1;
-    --accent:#2B6777;
-    --accent-ink:#FFFFFF;
-    --warn:#B8860B;
-    --warn-bg:#FBF1D9;
-    --danger:#B3412C;
+    --bg:#EDEFF2; --panel:#FFFFFF; --ink:#1B1F23; --ink-soft:#5B6472;
+    --line:#D7DBE1; --accent:#2B6777; --accent-ink:#FFFFFF;
+    --warn:#B8860B; --danger:#B3412C;
   }
   *{box-sizing:border-box;}
-  body{
-    margin:0;
-    background:var(--bg);
-    color:var(--ink);
-    font-family:"Space Grotesk", "Segoe UI", system-ui, sans-serif;
-    padding:24px 16px 80px;
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Space Grotesk","Segoe UI",system-ui,sans-serif;padding:24px 16px 100px;}
+  h1{font-size:22px;letter-spacing:-0.01em;margin:0 0 4px;}
+  .sub{color:var(--ink-soft);font-size:13px;margin:0 0 20px;}
+  nav a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600;}
+
+  .search{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+    font-family:inherit;font-size:14px;margin-bottom:16px;background:var(--panel);
   }
-  h1{
-    font-size:22px;
-    letter-spacing:-0.01em;
-    margin:0 0 4px;
+  .search:focus{outline:none;border-color:var(--accent);}
+
+  .categoria{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    margin-bottom:12px;overflow:hidden;
   }
-  .sub{
-    color:var(--ink-soft);
-    font-size:13px;
-    margin:0 0 24px;
+  .categoria-header{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:12px 14px;cursor:pointer;user-select:none;
   }
-  nav a{
-    color:var(--accent);
-    text-decoration:none;
-    font-size:13px;
-    font-weight:600;
+  .categoria-header h2{font-size:14px;margin:0;}
+  .categoria-header .count{font-size:12px;color:var(--ink-soft);font-family:"JetBrains Mono",monospace;}
+  .categoria-body{border-top:1px solid var(--line);display:none;}
+  .categoria.abierta .categoria-body{display:block;}
+  .categoria.abierta .chevron{transform:rotate(90deg);}
+  .chevron{transition:transform 0.15s;color:var(--ink-soft);}
+
+  .producto-row{
+    padding:10px 14px;border-bottom:1px dashed var(--line);
   }
-  section{
-    background:var(--panel);
-    border:1px solid var(--line);
-    border-radius:10px;
-    padding:16px;
-    margin-bottom:20px;
+  .producto-row:last-child{border-bottom:none;}
+  .producto-top{display:flex;align-items:center;gap:10px;}
+  .producto-top label{flex:1;font-size:13.5px;cursor:pointer;}
+  .producto-top .vendidos{font-size:11px;color:var(--ink-soft);font-family:"JetBrains Mono",monospace;white-space:nowrap;}
+  input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0;}
+
+  .insumos-box{
+    margin-top:10px;margin-left:28px;padding:10px;background:#F4FAFB;
+    border-radius:8px;display:none;
   }
-  section h2{
-    font-size:15px;
-    margin:0 0 2px;
+  .producto-row.marcado .insumos-box{display:block;}
+
+  .insumo-fila{display:flex;gap:6px;margin-bottom:6px;align-items:center;}
+  .insumo-fila input[type="text"]{flex:2;}
+  .insumo-fila input[type="number"]{flex:1;text-align:right;}
+  .insumo-fila input{
+    border:1px solid var(--line);border-radius:6px;padding:6px 8px;
+    font-family:"JetBrains Mono",monospace;font-size:12.5px;background:#fff;
   }
-  section p.hint{
-    color:var(--ink-soft);
-    font-size:12.5px;
-    margin:0 0 14px;
+  .insumo-fila button{
+    border:none;background:none;color:var(--danger);font-size:15px;cursor:pointer;padding:2px 6px;
   }
-  table{
-    width:100%;
-    border-collapse:collapse;
-    font-size:13.5px;
+  .add-insumo{
+    border:1px dashed var(--line);background:none;color:var(--accent);
+    font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;
   }
-  th{
-    text-align:left;
-    font-size:11px;
-    text-transform:uppercase;
-    letter-spacing:0.04em;
-    color:var(--ink-soft);
-    border-bottom:1px solid var(--line);
-    padding:6px 6px;
+
+  section.stock{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:16px;margin-top:20px;
   }
-  td{
-    border-bottom:1px dashed var(--line);
-    padding:4px 6px;
-  }
-  input{
-    width:100%;
-    border:1px solid transparent;
-    background:transparent;
-    font-family:"JetBrains Mono", "Courier New", monospace;
-    font-size:13px;
-    padding:5px 6px;
-    border-radius:6px;
-    color:var(--ink);
-  }
-  input:focus{
-    outline:none;
-    border-color:var(--accent);
-    background:#F4FAFB;
-  }
-  input[type="number"]{
-    text-align:right;
-  }
-  .col-num{width:110px;}
-  .row-actions{width:34px;}
-  button.icon{
-    border:none;
-    background:none;
-    color:var(--danger);
-    cursor:pointer;
-    font-size:16px;
-    line-height:1;
-    padding:4px;
-  }
-  .toolbar{
-    display:flex;
-    gap:8px;
-    margin-top:12px;
-  }
-  button.add{
-    border:1px dashed var(--line);
-    background:none;
-    color:var(--accent);
-    font-size:13px;
-    font-weight:600;
-    padding:8px 12px;
-    border-radius:8px;
-    cursor:pointer;
+  section.stock h2{font-size:15px;margin:0 0 2px;}
+  section.stock p.hint{color:var(--ink-soft);font-size:12.5px;margin:0 0 14px;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);border-bottom:1px solid var(--line);padding:6px;}
+  td{border-bottom:1px dashed var(--line);padding:4px 6px;}
+  td input{width:100%;border:1px solid transparent;background:transparent;font-family:"JetBrains Mono",monospace;font-size:13px;padding:5px 6px;border-radius:6px;color:var(--ink);}
+  td input:focus{outline:none;border-color:var(--accent);background:#F4FAFB;}
+  td input[type="number"]{text-align:right;}
+  .toolbar{display:flex;gap:8px;margin-top:12px;align-items:center;}
+  button.add{border:1px dashed var(--line);background:none;color:var(--accent);font-size:13px;font-weight:600;padding:8px 12px;border-radius:8px;cursor:pointer;}
+  button.icon{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:4px;}
+
+  .barra-guardar{
+    position:fixed;bottom:0;left:0;right:0;background:var(--panel);
+    border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;align-items:center;
+    box-shadow:0 -2px 10px rgba(0,0,0,0.05);
   }
   button.save{
-    border:none;
-    background:var(--accent);
-    color:var(--accent-ink);
-    font-size:13px;
-    font-weight:600;
-    padding:8px 16px;
-    border-radius:8px;
-    cursor:pointer;
-    margin-left:auto;
+    border:none;background:var(--accent);color:var(--accent-ink);font-size:14px;font-weight:700;
+    padding:10px 20px;border-radius:8px;cursor:pointer;
   }
-  button.save:disabled{opacity:0.5;cursor:default;}
-  .status{
-    font-size:12.5px;
-    margin-top:8px;
-    min-height:16px;
-  }
+  .status{font-size:12.5px;}
   .status.ok{color:#2E7D32;}
   .status.err{color:var(--danger);}
-  .status.warn{color:var(--warn);}
+  #loading{color:var(--ink-soft);font-size:13px;padding:20px 0;}
 </style>
 </head>
 <body>
 
 <nav><a href="/pedido-fabrica.html">→ Ver pedido sugerido de hoy</a></nav>
-<h1>Recetas y stock de fábrica</h1>
-<p class="sub">Define qué insumo de fábrica consume cada producto vendido, y el stock mínimo que siempre debe quedar en la cafetería.</p>
+<h1>Recetas de fábrica</h1>
+<p class="sub">Marca los productos que usan un insumo hecho en fábrica y dile cuánto consume cada unidad vendida. La lista viene directo de tus ventas de Toteat de los últimos 7 días.</p>
 
-<section>
-  <h2>Recetas (producto → insumo)</h2>
-  <p class="hint">El nombre de "producto" debe coincidir exactamente con el nombre del producto en Toteat. "Cantidad por unidad" es cuánto insumo consume 1 unidad vendida (ej: 0.4 = un cuarto de lomo, o usa la unidad que prefieras siempre que sea consistente con el stock).</p>
-  <table id="tabla-recetas">
-    <thead>
-      <tr><th>Producto (Toteat)</th><th>Insumo de fábrica</th><th class="col-num">Cant. por unidad</th><th class="row-actions"></th></tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-  <div class="toolbar">
-    <button class="add" data-add="recetas">+ Agregar fila</button>
-    <button class="save" data-save="recetas">Guardar recetas</button>
-  </div>
-  <div class="status" id="status-recetas"></div>
-</section>
+<div id="loading">Cargando productos desde Toteat...</div>
+<input type="text" class="search" id="buscador" placeholder="Buscar producto..." style="display:none">
+<div id="categorias"></div>
 
-<section>
+<section class="stock" id="seccion-stock" style="display:none">
   <h2>Stock de insumos</h2>
-  <p class="hint">Stock actual y stock mínimo por insumo. Cuando la proyección de venta deje el stock proyectado bajo el mínimo, aparecerá como alerta en el pedido del día.</p>
+  <p class="hint">Stock actual y mínimo de cada insumo que agregaste arriba. Cuando la venta proyectada deje el stock bajo el mínimo, aparece como alerta en el pedido del día.</p>
   <table id="tabla-stock">
-    <thead>
-      <tr><th>Insumo</th><th class="col-num">Stock actual</th><th class="col-num">Stock mínimo</th><th class="row-actions"></th></tr>
-    </thead>
+    <thead><tr><th>Insumo</th><th style="width:100px">Stock actual</th><th style="width:100px">Stock mínimo</th><th style="width:30px"></th></tr></thead>
     <tbody></tbody>
   </table>
   <div class="toolbar">
-    <button class="add" data-add="stock">+ Agregar fila</button>
-    <button class="save" data-save="stock">Guardar stock</button>
+    <button class="add" id="btn-sync-stock">+ Agregar insumos nuevos de las recetas</button>
+    <button class="add" id="btn-add-stock">+ Fila manual</button>
   </div>
-  <div class="status" id="status-stock"></div>
 </section>
+
+<div class="barra-guardar">
+  <button class="save" id="btn-guardar">Guardar todo</button>
+  <span class="status" id="status"></span>
+</div>
 
 <script>
-const FN = '/.netlify/functions/fabrica-datos';
+const FN_PRODUCTOS = '/.netlify/functions/productos-toteat';
+const FN_DATOS = '/.netlify/functions/fabrica-datos';
 
-function filaRecetas(r = {}) {
-  const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td><input type="text" data-field="producto" value="${escapeAttr(r.producto || '')}" placeholder="Sandwich Lomo Vetado"></td>
-    <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}" placeholder="Lomo vetado sellado al vacío"></td>
-    <td><input type="number" step="0.01" data-field="cantidadPorUnidad" value="${r.cantidadPorUnidad ?? ''}" placeholder="0.4"></td>
-    <td><button class="icon" data-remove>✕</button></td>
-  `;
-  return tr;
+let categorias = [];       // [{categoria, productos:[{producto, unidadesVendidas}]}]
+let mapaInsumos = {};       // producto -> [{insumo, cantidadPorUnidad}]
+let stockFilas = [];        // [{insumo, stockActual, stockMinimo}]
+
+async function cargarTodo() {
+  const [resProd, resRecetas, resStock] = await Promise.all([
+    fetch(FN_PRODUCTOS).then((r) => r.json()),
+    fetch(`${FN_DATOS}?key=recetas`).then((r) => r.json()),
+    fetch(`${FN_DATOS}?key=stock`).then((r) => r.json()),
+  ]);
+
+  document.getElementById('loading').style.display = 'none';
+
+  if (!resProd.ok) {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('loading').textContent = 'Error trayendo productos: ' + (resProd.error || '');
+    return;
+  }
+
+  categorias = resProd.categorias || [];
+  stockFilas = (resStock.data || []);
+
+  // arma mapaInsumos a partir de recetas ya guardadas
+  (resRecetas.data || []).forEach((r) => {
+    if (!mapaInsumos[r.producto]) mapaInsumos[r.producto] = [];
+    mapaInsumos[r.producto].push({ insumo: r.insumo, cantidadPorUnidad: r.cantidadPorUnidad });
+  });
+
+  document.getElementById('buscador').style.display = 'block';
+  document.getElementById('seccion-stock').style.display = 'block';
+  renderCategorias();
+  renderStock();
 }
 
+function renderCategorias(filtro = '') {
+  const cont = document.getElementById('categorias');
+  cont.innerHTML = '';
+  const f = filtro.trim().toLowerCase();
+
+  categorias.forEach((cat, ci) => {
+    const productosFiltrados = f
+      ? cat.productos.filter((p) => p.producto.toLowerCase().includes(f))
+      : cat.productos;
+    if (f && productosFiltrados.length === 0) return;
+
+    const div = document.createElement('div');
+    div.className = 'categoria' + (f ? ' abierta' : '');
+    div.innerHTML = `
+      <div class="categoria-header" data-toggle="${ci}">
+        <h2>${cat.categoria}</h2>
+        <span class="count">${productosFiltrados.length} producto(s) <span class="chevron">›</span></span>
+      </div>
+      <div class="categoria-body" id="cat-body-${ci}"></div>
+    `;
+    cont.appendChild(div);
+
+    const body = div.querySelector('.categoria-body');
+    productosFiltrados.forEach((p) => {
+      body.appendChild(renderProducto(p));
+    });
+  });
+
+  cont.querySelectorAll('.categoria-header').forEach((h) => {
+    h.addEventListener('click', () => h.closest('.categoria').classList.toggle('abierta'));
+  });
+}
+
+function renderProducto(p) {
+  const marcado = !!mapaInsumos[p.producto];
+  const row = document.createElement('div');
+  row.className = 'producto-row' + (marcado ? ' marcado' : '');
+  row.dataset.producto = p.producto;
+
+  row.innerHTML = `
+    <div class="producto-top">
+      <input type="checkbox" ${marcado ? 'checked' : ''}>
+      <label>${p.producto}</label>
+      <span class="vendidos">${p.unidadesVendidas} vendidos · 7 días</span>
+    </div>
+    <div class="insumos-box"></div>
+  `;
+
+  const checkbox = row.querySelector('input[type="checkbox"]');
+  const insumosBox = row.querySelector('.insumos-box');
+
+  function pintarInsumos() {
+    insumosBox.innerHTML = '';
+    const filas = mapaInsumos[p.producto] || [];
+    filas.forEach((f, idx) => insumosBox.appendChild(filaInsumo(p.producto, idx, f)));
+    const btn = document.createElement('button');
+    btn.className = 'add-insumo';
+    btn.textContent = '+ insumo';
+    btn.addEventListener('click', () => {
+      mapaInsumos[p.producto] = mapaInsumos[p.producto] || [];
+      mapaInsumos[p.producto].push({ insumo: '', cantidadPorUnidad: '' });
+      pintarInsumos();
+    });
+    insumosBox.appendChild(btn);
+  }
+
+  function filaInsumo(producto, idx, f) {
+    const fila = document.createElement('div');
+    fila.className = 'insumo-fila';
+    fila.innerHTML = `
+      <input type="text" placeholder="Insumo (ej: Lomo vetado sellado al vacío)" value="${escapeAttr(f.insumo)}">
+      <input type="number" step="0.01" placeholder="Cant./u" value="${f.cantidadPorUnidad}">
+      <button title="Quitar">✕</button>
+    `;
+    const [inputInsumo, inputCant] = fila.querySelectorAll('input');
+    inputInsumo.addEventListener('input', () => { mapaInsumos[producto][idx].insumo = inputInsumo.value; });
+    inputCant.addEventListener('input', () => { mapaInsumos[producto][idx].cantidadPorUnidad = Number(inputCant.value); });
+    fila.querySelector('button').addEventListener('click', () => {
+      mapaInsumos[producto].splice(idx, 1);
+      if (mapaInsumos[producto].length === 0) delete mapaInsumos[producto];
+      pintarInsumos();
+    });
+    return fila;
+  }
+
+  if (marcado) pintarInsumos();
+
+  checkbox.addEventListener('change', () => {
+    if (checkbox.checked) {
+      row.classList.add('marcado');
+      if (!mapaInsumos[p.producto]) mapaInsumos[p.producto] = [{ insumo: '', cantidadPorUnidad: '' }];
+      pintarInsumos();
+    } else {
+      row.classList.remove('marcado');
+      delete mapaInsumos[p.producto];
+    }
+  });
+
+  return row;
+}
+
+function escapeAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
+
+document.getElementById('buscador').addEventListener('input', (e) => renderCategorias(e.target.value));
+
+// --- Stock ---
 function filaStock(r = {}) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}" placeholder="Lomo vetado sellado al vacío"></td>
-    <td><input type="number" step="1" data-field="stockActual" value="${r.stockActual ?? ''}" placeholder="73"></td>
-    <td><input type="number" step="1" data-field="stockMinimo" value="${r.stockMinimo ?? ''}" placeholder="15"></td>
+    <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}"></td>
+    <td><input type="number" step="1" data-field="stockActual" value="${r.stockActual ?? ''}"></td>
+    <td><input type="number" step="1" data-field="stockMinimo" value="${r.stockMinimo ?? ''}"></td>
     <td><button class="icon" data-remove>✕</button></td>
   `;
   return tr;
 }
 
-function escapeAttr(s) {
-  return String(s).replace(/"/g, '&quot;');
-}
-
-async function cargar(key) {
-  const res = await fetch(`${FN}?key=${key}`);
-  const json = await res.json();
-  const tbody = document.querySelector(`#tabla-${key} tbody`);
+function renderStock() {
+  const tbody = document.querySelector('#tabla-stock tbody');
   tbody.innerHTML = '';
-  const fabricaFila = key === 'recetas' ? filaRecetas : filaStock;
-  (json.data || []).forEach((r) => tbody.appendChild(fabricaFila(r)));
-  if (!json.data || !json.data.length) tbody.appendChild(fabricaFila());
+  stockFilas.forEach((r) => tbody.appendChild(filaStock(r)));
 }
 
-function leerTabla(key) {
-  const tbody = document.querySelector(`#tabla-${key} tbody`);
-  const filas = [...tbody.querySelectorAll('tr')];
+document.getElementById('btn-add-stock').addEventListener('click', () => {
+  document.querySelector('#tabla-stock tbody').appendChild(filaStock());
+});
+
+document.getElementById('btn-sync-stock').addEventListener('click', () => {
+  const insumosEnUso = new Set();
+  Object.values(mapaInsumos).forEach((filas) => filas.forEach((f) => { if (f.insumo) insumosEnUso.add(f.insumo); }));
+  const yaEnStock = new Set([...document.querySelectorAll('#tabla-stock [data-field="insumo"]')].map((i) => i.value));
+  const tbody = document.querySelector('#tabla-stock tbody');
+  let agregados = 0;
+  insumosEnUso.forEach((insumo) => {
+    if (!yaEnStock.has(insumo)) {
+      tbody.appendChild(filaStock({ insumo, stockActual: 0, stockMinimo: 0 }));
+      agregados++;
+    }
+  });
+  document.getElementById('status').textContent = agregados
+    ? `${agregados} insumo(s) agregado(s) al stock, completa las cantidades.`
+    : 'No hay insumos nuevos para agregar.';
+  document.getElementById('status').className = 'status ok';
+});
+
+document.body.addEventListener('click', (e) => {
+  if (e.target.matches('[data-remove]')) e.target.closest('tr').remove();
+});
+
+function leerStockTabla() {
+  const filas = [...document.querySelectorAll('#tabla-stock tbody tr')];
   return filas.map((tr) => {
     const obj = {};
     tr.querySelectorAll('input').forEach((input) => {
-      const campo = input.dataset.field;
-      obj[campo] = input.type === 'number' ? Number(input.value) : input.value.trim();
+      obj[input.dataset.field] = input.type === 'number' ? Number(input.value) : input.value.trim();
     });
     return obj;
-  }).filter((obj) => Object.values(obj).some((v) => v !== '' && v !== 0 && !Number.isNaN(v)));
+  }).filter((o) => o.insumo);
 }
 
-async function guardar(key) {
-  const statusEl = document.getElementById(`status-${key}`);
-  const data = leerTabla(key);
+function leerRecetas() {
+  const recetas = [];
+  Object.entries(mapaInsumos).forEach(([producto, filas]) => {
+    filas.forEach((f) => {
+      if (f.insumo && f.cantidadPorUnidad > 0) {
+        recetas.push({ producto, insumo: f.insumo.trim(), cantidadPorUnidad: Number(f.cantidadPorUnidad) });
+      }
+    });
+  });
+  return recetas;
+}
+
+document.getElementById('btn-guardar').addEventListener('click', async () => {
+  const statusEl = document.getElementById('status');
   statusEl.textContent = 'Guardando...';
   statusEl.className = 'status';
   try {
-    const res = await fetch(FN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, data }),
-    });
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || 'Error desconocido');
-    statusEl.textContent = `Guardado (${json.guardado} filas).`;
+    const recetas = leerRecetas();
+    const stock = leerStockTabla();
+
+    const [r1, r2] = await Promise.all([
+      fetch(FN_DATOS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'recetas', data: recetas }) }),
+      fetch(FN_DATOS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'stock', data: stock }) }),
+    ]);
+    const j1 = await r1.json(), j2 = await r2.json();
+    if (!j1.ok || !j2.ok) throw new Error(j1.error || j2.error || 'Error desconocido');
+
+    statusEl.textContent = `Guardado: ${j1.guardado} recetas, ${j2.guardado} insumos en stock.`;
     statusEl.className = 'status ok';
   } catch (e) {
     statusEl.textContent = 'Error: ' + e.message;
     statusEl.className = 'status err';
   }
-}
-
-document.querySelectorAll('button[data-add]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const key = btn.dataset.add;
-    const tbody = document.querySelector(`#tabla-${key} tbody`);
-    tbody.appendChild(key === 'recetas' ? filaRecetas() : filaStock());
-  });
 });
 
-document.querySelectorAll('button[data-save]').forEach((btn) => {
-  btn.addEventListener('click', () => guardar(btn.dataset.save));
-});
-
-document.body.addEventListener('click', (e) => {
-  if (e.target.matches('[data-remove]')) {
-    e.target.closest('tr').remove();
-  }
-});
-
-cargar('recetas');
-cargar('stock');
+cargarTodo();
 </script>
 </body>
 </html>
