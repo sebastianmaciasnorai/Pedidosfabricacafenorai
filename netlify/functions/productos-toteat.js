@@ -28,7 +28,8 @@ exports.handler = async (event) => {
     for (const p of resumen.products || []) {
       const cat = p.category || 'Sin categoría';
       if (!porCategoria.has(cat)) porCategoria.set(cat, []);
-      porCategoria.get(cat).push({ producto: p.name, unidadesVendidas: p.quantity, ventaTotal: p.revenue });
+      const precioUnitario = p.quantity > 0 ? Math.round(p.revenue / p.quantity) : 0;
+      porCategoria.get(cat).push({ producto: p.name, unidadesVendidas: p.quantity, ventaTotal: p.revenue, precioUnitario });
     }
 
     const categorias = [...porCategoria.entries()]
