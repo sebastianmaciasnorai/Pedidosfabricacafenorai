@@ -1,13 +1,16 @@
 // netlify/functions/debug-tartaleta.js
 //
-// TEMPORAL -- solo para diagnóstico. Busca en un día de ventas las líneas
-// que mencionen "tartaleta" (sin importar mayúsculas) y devuelve el
-// objeto CRUDO tal cual lo manda Toteat, para ver exactamente en qué
-// campo viene el sabor (nombre, modificador, "options", etc.).
+// TEMPORAL -- solo para diagnóstico. Revisa un rango de días y separa las
+// ventas de un producto (por defecto "Tartaleta") en dos grupos:
+//   - conSabor: el cliente sí eligió una variante (ej: "Manzana")
+//   - sinSabor: la línea del producto quedó sola, sin ninguna línea de
+//     variante apuntándole -- por eso aparece como "Tartaleta" genérica.
+// Devuelve fecha y hora exactas de cada venta "sin sabor" para que puedas
+// ir a buscar la boleta en Toteat y confirmar qué pasó.
 //
 // Bórrala cuando ya no la necesites.
 //
-// GET /.netlify/functions/debug-tartaleta?fecha=20260828
+// GET /.netlify/functions/debug-tartaleta?producto=Tartaleta&dias=7
 
 exports.handler = async (event) => {
   const qs = event.queryStringParameters || {};
@@ -16,42 +19,87 @@ exports.handler = async (event) => {
     return jsonResponse(500, { ok: false, error: 'Faltan variables de entorno de Toteat en el servidor.' });
   }
 
-  const fecha = qs.fecha || formatYYYYMMDD(new Date());
-  const buscar = (qs.buscar || 'tartaleta').toLowerCase();
+  const producto = (qs.producto || 'Tartaleta').trim().toLowerCase();
+  const dias = Number(qs.dias) || 7;
+  const end = formatYYYYMMDD(new Date());
+  const fechas = ultimosNDias(end, dias);
 
-  const url = new URL('https://api.toteat.com/mw/or/1.0/sales');
-  url.searchParams.set('xir', TOTEAT_XIR);
-  url.searchParams.set('xil', TOTEAT_XIL);
-  url.searchParams.set('xiu', TOTEAT_XIU);
-  url.searchParams.set('xapitoken', TOTEAT_API_TOKEN);
-  url.searchParams.set('ini', fecha);
-  url.searchParams.set('end', fecha);
-  url.searchParams.set('detail_cancel_order', 'true');
+  const conSabor = [];
+  const sinSabor = [];
 
   try {
-    const res = await fetch(url.toString());
-    const data = await res.json();
-    const sales = (data && data.data) || [];
+    for (const fecha of fechas) {
+      const sales = await fetchToteatDia(fecha, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU });
 
-    const encontrados = [];
-    for (const sale of sales) {
-      const productos = sale.products || [];
-      const hayCoincidencia = productos.some((p) => String(p.name || '').toLowerCase().includes(buscar));
-      if (hayCoincidencia) {
-        encontrados.push({
-          saleId: sale.id || sale.saleId || '(sin id)',
-          dateClosed: sale.dateClosed,
-          products: productos,
-        });
+      for (const sale of sales) {
+        const productos = sale.products || [];
+        // líneas principales (no son variante de otra) cuyo nombre calza con "producto"
+        const lineasProducto = productos.filter(
+          (p) => (p.lineReference == null || Number(p.lineReference) === 0) &&
+                 String(p.name || '').trim().toLowerCase() === producto
+        );
+
+        for (const linea of lineasProducto) {
+          const variante = productos.find(
+            (p) => p.lineReference != null && Number(p.lineReference) === Number(linea.lineId)
+          );
+          const entrada = {
+            fecha: sale.dateClosed,
+            precio: linea.payed,
+          };
+          if (variante) {
+            entrada.sabor = variante.name;
+            conSabor.push(entrada);
+          } else {
+            sinSabor.push(entrada);
+          }
+        }
       }
-      if (encontrados.length >= 5) break; // no hace falta más de 5 ejemplos
     }
 
-    return jsonResponse(200, { ok: true, fecha, buscar, encontrados: encontrados.length, ventas: encontrados });
+    return jsonResponse(200, {
+      ok: true,
+      producto: qs.producto || 'Tartaleta',
+      rangoDias: dias,
+      totalConSabor: conSabor.length,
+      totalSinSabor: sinSabor.length,
+      ventasSinSabor: sinSabor,
+      ejemploConSabor: conSabor.slice(0, 5),
+    });
   } catch (e) {
     return jsonResponse(502, { ok: false, error: 'No se pudo conectar con Toteat.', detail: String(e) });
   }
 };
+
+async function fetchToteatDia(fechaYYYYMMDD, creds) {
+  const url = new URL('https://api.toteat.com/mw/or/1.0/sales');
+  url.searchParams.set('xir', creds.TOTEAT_XIR);
+  url.searchParams.set('xil', creds.TOTEAT_XIL);
+  url.searchParams.set('xiu', creds.TOTEAT_XIU);
+  url.searchParams.set('xapitoken', creds.TOTEAT_API_TOKEN);
+  url.searchParams.set('ini', fechaYYYYMMDD);
+  url.searchParams.set('end', fechaYYYYMMDD);
+  url.searchParams.set('detail_cancel_order', 'true');
+  const res = await fetch(url.toString());
+  const data = await res.json();
+  if (!res.ok || data.ok === false) throw new Error('Toteat rechazó la consulta para ' + fechaYYYYMMDD);
+  return (data && data.data) || [];
+}
+
+function ultimosNDias(endYYYYMMDD, n) {
+  const end = new Date(
+    Number(endYYYYMMDD.slice(0, 4)),
+    Number(endYYYYMMDD.slice(4, 6)) - 1,
+    Number(endYYYYMMDD.slice(6, 8))
+  );
+  const fechas = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(end);
+    d.setDate(d.getDate() - i);
+    fechas.push(formatYYYYMMDD(d));
+  }
+  return fechas;
+}
 
 function formatYYYYMMDD(d) {
   const y = d.getFullYear();
@@ -70,3 +118,4 @@ function jsonResponse(statusCode, body) {
     body: JSON.stringify(body, null, 2),
   };
 }
+
