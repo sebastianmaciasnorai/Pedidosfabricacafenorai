@@ -8,7 +8,7 @@
 //
 // GET /.netlify/functions/productos-toteat?dias=7
 
-const { obtenerVentasEnVivo } = require('./ventas-fabrica');
+const { obtenerVentasConCache } = require('./ventas-cache');
 
 exports.handler = async (event) => {
   const qs = event.queryStringParameters || {};
@@ -22,14 +22,26 @@ exports.handler = async (event) => {
   const ini = sumarDiasYYYYMMDD(end, -(dias - 1));
 
   try {
-    const resumen = await obtenerVentasEnVivo(ini, end, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU });
+    const { porDia } = await obtenerVentasConCache(ini, end, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU });
+
+    // Suma productos de todos los días del rango (mismo criterio que
+    // obtenerVentasEnVivo, pero acá partiendo de porDia ya cacheado).
+    const byProduct = new Map();
+    for (const dia of porDia) {
+      (dia.products || []).forEach((p) => {
+        const e = byProduct.get(p.name) || { revenue: 0, quantity: 0, category: p.category };
+        e.revenue += p.revenue;
+        e.quantity += p.quantity;
+        byProduct.set(p.name, e);
+      });
+    }
 
     const porCategoria = new Map();
-    for (const p of resumen.products || []) {
-      const cat = p.category || 'Sin categoría';
+    for (const [name, v] of byProduct.entries()) {
+      const cat = v.category || 'Sin categoría';
       if (!porCategoria.has(cat)) porCategoria.set(cat, []);
-      const precioUnitario = p.quantity > 0 ? Math.round(p.revenue / p.quantity) : 0;
-      porCategoria.get(cat).push({ producto: p.name, unidadesVendidas: p.quantity, ventaTotal: p.revenue, precioUnitario });
+      const precioUnitario = v.quantity > 0 ? Math.round(v.revenue / v.quantity) : 0;
+      porCategoria.get(cat).push({ producto: name, unidadesVendidas: v.quantity, ventaTotal: v.revenue, precioUnitario });
     }
 
     const categorias = [...porCategoria.entries()]

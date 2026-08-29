@@ -538,4 +538,9 @@ module.exports = {
   obtenerVentasEnVivo,
   calcularTendenciaCierre,
   calcularTendenciaCierrePorProducto,
+  fetchToteatDia,
+  resumirDia,
+  listaFechasEntre,
+  formatYYYYMMDD,
+  esperar,
 };

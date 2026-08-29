@@ -1,17 +1,42 @@
 // netlify/functions/pedido-fabrica.js
 //
 // Junta tres piezas para responder "¿qué le pedimos hoy a la fábrica?":
-//   1. Tendencia de cierre POR PRODUCTO (ventas-fabrica.js)
-//   2. La receta producto -> insumo (Netlify Blobs: recetas.json)
-//   3. El stock actual y mínimo de cada insumo (Netlify Blobs: stock.json)
+//
+//   1. Tendencia de cierre POR PRODUCTO (ventas-fabrica.js) -- cuántas
+//      unidades de cada producto vamos a vender hoy, proyectado.
+//   2. La receta producto -> insumo (Netlify Blobs: recetas.json) -- cuánto
+//      insumo de fábrica consume cada unidad vendida.
+//   3. El stock actual y mínimo de cada insumo (Netlify Blobs: stock.json).
+//
+// Con eso arma, insumo por insumo: cuánto se va a necesitar hoy, cuánto va
+// a quedar de stock al cierre, y si hay que pedir más (y cuánto).
 //
 // GET /.netlify/functions/pedido-fabrica?end=20260828&dias=14
+//   end  -> día que se proyecta (default: hoy)
+//   dias -> cuántos días hacia atrás pedirle a Toteat para tener buen
+//           historial de tendencia, incluyendo "end" (default: 14)
 //
-// Usa BLOBS_SITE_ID y BLOBS_TOKEN (variables de entorno) para autenticarse
-// con Netlify Blobs de forma explícita.
+// Respuesta:
+// {
+//   ok: true,
+//   rangeIni, rangeEnd, fechaProyectada,
+//   alertas: [ ...filas de "detalle" que quedaron bajo el mínimo... ],
+//   detalle: [
+//     { insumo, necesidadHoy, stockActual, stockMinimo,
+//       stockProyectadoFinDia, bajoMinimo, sugeridoPedirAFabrica },
+//     ...
+//   ]
+// }
+//
+// SIMPLIFICACIÓN CONSCIENTE: "sugeridoPedirAFabrica" solo devuelve al
+// insumo exactamente al stockMinimo, no a un buffer arriba de eso. Si
+// quieren siempre quedar con más colchón (ej. mínimo + 1 día extra de
+// venta), ese es el único número a ajustar, en la línea que calcula
+// `sugeridoPedir` más abajo.
 
 const { getStore } = require('@netlify/blobs');
-const { obtenerVentasEnVivo, calcularTendenciaCierrePorProducto } = require('./ventas-fabrica');
+const { calcularTendenciaCierrePorProducto } = require('./ventas-fabrica');
+const { obtenerVentasConCache } = require('./ventas-cache');
 
 const STORE_NAME = 'pedido-fabrica';
 
@@ -46,7 +71,7 @@ exports.handler = async (event) => {
       });
     }
 
-    const resumen = await obtenerVentasEnVivo(ini, end, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU });
+    const resumen = await obtenerVentasConCache(ini, end, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU });
     const fechaAProyectarISO = yyyymmddToISO(end);
     const tendenciaProductos = calcularTendenciaCierrePorProducto(resumen.porDia, fechaAProyectarISO) || [];
 
@@ -54,6 +79,7 @@ exports.handler = async (event) => {
       tendenciaProductos.map((t) => [t.producto, t.unidadesProyectadasCierre])
     );
 
+    // Explota proyección de productos -> necesidad de insumos.
     const necesidadPorInsumo = new Map();
     for (const receta of recetas) {
       const proyeccionProducto = proyeccionPorProducto.get(receta.producto) || 0;
@@ -92,6 +118,7 @@ exports.handler = async (event) => {
       rangeIni: ini,
       rangeEnd: end,
       fechaProyectada: fechaAProyectarISO,
+      checkpoint: resumen.checkpoint,
       alertas,
       detalle,
     });
