@@ -105,6 +105,7 @@
   <h1>Fábrica · Norai Café</h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
+    <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
     <button class="tab-btn" data-tab="admin">Recetas y stock</button>
   </div>
 </header>
@@ -135,6 +136,27 @@
   </section>
 </div>
 
+<!-- ================= TAB: POR EMPEZAR A FABRICAR ================= -->
+<div class="tab-panel" id="tab-fabricar">
+  <p class="sub">Insumos que se demoran más de un día en fabricarse -- mira "hoy + días de elaboración" en vez de solo hoy, para avisar con anticipación.</p>
+  <div id="loading-fabricar">Calculando...</div>
+  <section id="seccion-fabricar" style="display:none">
+    <table>
+      <thead>
+        <tr>
+          <th>Insumo</th>
+          <th class="num">Listo para</th>
+          <th class="num">Venta proyectada</th>
+          <th class="num">Stock actual</th>
+          <th class="num">Mínimo</th>
+          <th class="num">A producir hoy</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-fabricar"></tbody>
+    </table>
+  </section>
+</div>
+
 <!-- ================= TAB: ADMIN (recetas/stock) ================= -->
 <div class="tab-panel" id="tab-admin">
   <p class="sub">Marca los productos que vienen de fábrica (completos o en parte) y dile cuánto insumo consume cada unidad vendida. La lista viene directo de tus ventas de Toteat de los últimos 7 días.</p>
@@ -146,9 +168,9 @@
 
   <section class="stock" id="seccion-stock" style="display:none">
     <h2>Stock de insumos</h2>
-    <p class="hint">Stock actual y mínimo, medidos en <strong>envases</strong> (como te los manda la fábrica). "Tamaño envase" es cuánto trae cada envase, en la MISMA unidad que uses en las recetas de arriba (ej: si escribiste "200" en una receta pensando en gramos, y la fábrica manda envases de 1 kilo, pon 1000 acá). Si el insumo ya se mide en unidades completas, deja el tamaño de envase en 1.</p>
+    <p class="hint">Stock actual y mínimo, medidos en <strong>envases</strong> (como te los manda la fábrica). "Tamaño envase" es cuánto trae cada envase, en la MISMA unidad que uses en las recetas de arriba. "Días elaborac." es cuántos días se demora la fábrica en tener listo ESE insumo (ej: 3 para un brownie que se hornea, se enfría y se corta al otro día) -- déjalo en 0 si se puede reponer el mismo día. Con eso, la pestaña "Por empezar a fabricar" te avisa con anticipación.</p>
     <table id="tabla-stock">
-      <thead><tr><th>Insumo</th><th style="width:90px">Tamaño envase</th><th style="width:90px">Stock actual (envases)</th><th style="width:90px">Mínimo (envases)</th><th style="width:30px"></th></tr></thead>
+      <thead><tr><th>Insumo</th><th style="width:80px">Días elaborac.</th><th style="width:80px">Tamaño envase</th><th style="width:80px">Stock (envases)</th><th style="width:80px">Mínimo (envases)</th><th style="width:30px"></th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="toolbar">
@@ -168,6 +190,7 @@
 const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 let adminCargado = false;
+let fabricarCargado = false;
 
 tabButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -182,6 +205,10 @@ tabButtons.forEach((btn) => {
     if (esAdmin && !adminCargado) {
       adminCargado = true;
       cargarAdmin();
+    }
+    if (btn.dataset.tab === 'fabricar' && !fabricarCargado) {
+      fabricarCargado = true;
+      cargarFabricar();
     }
   });
 });
@@ -205,10 +232,20 @@ tabButtons.forEach((btn) => {
 
       let textoFecha = `Proyectando ${json.fechaProyectada || ''} · historial ${json.rangeIni || ''}–${json.rangeEnd || ''}`;
       if (json.checkpoint) {
-        const cp = json.checkpoint;
-        const hora = cp.ultimaHoraConVentas != null ? `${cp.ultimaHoraConVentas}:00` : '—';
-        const sinc = cp.ultimaSincronizacion ? new Date(cp.ultimaSincronizacion).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—';
-        textoFecha += `\nSincronizado ${sinc} · última boleta vista: ${cp.fechaHoy || ''} ${hora} · ${cp.ordenesHoy ?? '—'} boletas hoy`;
+        try {
+          const cp = json.checkpoint;
+          const hora = cp.ultimaHoraConVentas != null ? `${cp.ultimaHoraConVentas}:00` : '—';
+          let sinc = '—';
+          if (cp.ultimaSincronizacion) {
+            const d = new Date(cp.ultimaSincronizacion);
+            if (!isNaN(d.getTime())) {
+              sinc = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+            }
+          }
+          textoFecha += `\nSincronizado ${sinc} · última boleta vista: ${cp.fechaHoy || ''} ${hora} · ${cp.ordenesHoy ?? '—'} boletas hoy`;
+        } catch (e) {
+          // si algo falla formateando el checkpoint, no rompe el resto de la pantalla
+        }
       }
       document.getElementById('fecha').textContent = textoFecha;
       document.getElementById('fecha').style.whiteSpace = 'pre-line';
@@ -259,6 +296,56 @@ tabButtons.forEach((btn) => {
 
   cargar();
 })();
+
+// ===================== POR EMPEZAR A FABRICAR =====================
+async function cargarFabricar() {
+  const loading = document.getElementById('loading-fabricar');
+  try {
+    const res = await fetch('/.netlify/functions/pronostico-fabricacion');
+    const json = await res.json();
+    loading.style.display = 'none';
+
+    if (!json.ok) {
+      loading.style.display = 'block';
+      loading.textContent = 'Error: ' + (json.error || 'desconocido');
+      return;
+    }
+    if (json.nota) {
+      loading.style.display = 'block';
+      loading.textContent = json.nota;
+      return;
+    }
+
+    const items = json.items || [];
+    if (!items.length) {
+      loading.style.display = 'block';
+      loading.textContent = 'No hay insumos con días de elaboración configurados.';
+      return;
+    }
+
+    document.getElementById('seccion-fabricar').style.display = 'block';
+    const tbody = document.getElementById('tbody-fabricar');
+    tbody.innerHTML = '';
+    items.forEach((it) => {
+      const tr = document.createElement('tr');
+      if (it.necesitaProducir) tr.classList.add('bajo-minimo');
+      tr.innerHTML = `
+        <td class="nombre">${it.insumo}</td>
+        <td class="num">${it.diaSemanaObjetivo} ${it.fechaObjetivo} <span style="color:var(--ink-soft);">(+${it.diasElaboracion}d)</span></td>
+        <td class="num">${it.ventaPromedioProyectada}</td>
+        <td class="num">${it.stockActual}</td>
+        <td class="num">${it.stockMinimo}</td>
+        <td class="num">${it.necesitaProducir
+          ? `<span class="pill pedir">${it.unidadesAProducir}</span>`
+          : `<span class="pill ok">—</span>`}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    loading.style.display = 'block';
+    loading.textContent = 'Error de conexión: ' + e.message;
+  }
+}
 
 // ===================== RECETAS Y STOCK =====================
 let categorias = [];
@@ -405,6 +492,7 @@ function filaStock(r = {}) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}"></td>
+    <td><input type="number" step="1" min="0" data-field="diasElaboracion" value="${r.diasElaboracion ?? 0}"></td>
     <td><input type="number" step="1" min="1" data-field="tamanoEnvase" value="${r.tamanoEnvase ?? 1}"></td>
     <td><input type="number" step="0.1" data-field="stockActual" value="${r.stockActual ?? ''}"></td>
     <td><input type="number" step="0.1" data-field="stockMinimo" value="${r.stockMinimo ?? ''}"></td>
@@ -438,7 +526,7 @@ document.getElementById('btn-sync-stock').addEventListener('click', () => {
   let agregados = 0;
   insumosEnUso.forEach((insumo) => {
     if (!yaEnStock.has(insumo)) {
-      tbody.appendChild(filaStock({ insumo, tamanoEnvase: 1, stockActual: 0, stockMinimo: 0 }));
+      tbody.appendChild(filaStock({ insumo, diasElaboracion: 0, tamanoEnvase: 1, stockActual: 0, stockMinimo: 0 }));
       agregados++;
     }
   });
