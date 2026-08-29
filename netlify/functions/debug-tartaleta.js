@@ -5,12 +5,20 @@
 //   - conSabor: el cliente sí eligió una variante (ej: "Manzana")
 //   - sinSabor: la línea del producto quedó sola, sin ninguna línea de
 //     variante apuntándole -- por eso aparece como "Tartaleta" genérica.
-// Devuelve fecha y hora exactas de cada venta "sin sabor" para que puedas
-// ir a buscar la boleta en Toteat y confirmar qué pasó.
+// Devuelve el detalle de cada venta "sin sabor" y un resumen de qué
+// proporción de las ventas CON sabor fue de cada variante, para poder
+// repartir las ventas sin sabor de forma proporcional.
+//
+// Usa la misma técnica de "tandas de 3 en paralelo + reintentos" que
+// ventas-fabrica.js, para no perder días por el límite de Toteat al pedir
+// varios días seguidos.
 //
 // Bórrala cuando ya no la necesites.
 //
-// GET /.netlify/functions/debug-tartaleta?producto=Tartaleta&dias=7
+// GET /.netlify/functions/debug-tartaleta?producto=Tartaleta&dias=14
+
+const TAMANO_TANDA = 3;
+const PAUSA_MS = 250;
 
 exports.handler = async (event) => {
   const qs = event.queryStringParameters || {};
@@ -23,24 +31,19 @@ exports.handler = async (event) => {
   const dias = Number(qs.dias) || 7;
   const end = formatYYYYMMDD(new Date());
   const fechas = ultimosNDias(end, dias);
+  const creds = { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU };
+
+  const { porDiaMap, diasConError } = await obtenerTodasLasVentas(fechas, creds);
 
   const conSabor = [];
   const sinSabor = [];
-  const diasConError = [];
 
   for (const fecha of fechas) {
-    let sales;
-    try {
-      sales = await fetchToteatDia(fecha, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU });
-      await esperar(300); // pequeña pausa entre días para no gatillar el rate limit de Toteat
-    } catch (e) {
-      diasConError.push(fecha);
-      continue;
-    }
+    const sales = porDiaMap.get(fecha);
+    if (!sales) continue;
 
     for (const sale of sales) {
       const productos = sale.products || [];
-      // líneas principales (no son variante de otra) cuyo nombre calza con "producto"
       const lineasProducto = productos.filter(
         (p) => (p.lineReference == null || Number(p.lineReference) === 0) &&
                String(p.name || '').trim().toLowerCase() === producto
@@ -50,10 +53,7 @@ exports.handler = async (event) => {
         const variante = productos.find(
           (p) => p.lineReference != null && Number(p.lineReference) === Number(linea.lineId)
         );
-        const entrada = {
-          fecha: sale.dateClosed,
-          precio: linea.payed,
-        };
+        const entrada = { fecha: sale.dateClosed, precio: linea.payed };
         if (variante) {
           entrada.sabor = variante.name;
           conSabor.push(entrada);
@@ -76,7 +76,8 @@ exports.handler = async (event) => {
   return jsonResponse(200, {
     ok: true,
     producto: qs.producto || 'Tartaleta',
-    rangoDias: dias,
+    rangoDiasPedido: dias,
+    diasConDatos: fechas.length - diasConError.length,
     totalConSabor: conSabor.length,
     totalSinSabor: sinSabor.length,
     resumenPorSabor,
@@ -85,6 +86,37 @@ exports.handler = async (event) => {
     diasConError: diasConError.length ? diasConError : undefined,
   });
 };
+
+// Igual que obtenerVentasEnVivo de ventas-fabrica.js pero devolviendo las
+// ventas crudas de cada día (sin resumir), que es lo que necesita este
+// diagnóstico.
+async function obtenerTodasLasVentas(fechas, creds) {
+  const porDiaMap = new Map();
+
+  for (let i = 0; i < fechas.length; i += TAMANO_TANDA) {
+    const tanda = fechas.slice(i, i + TAMANO_TANDA);
+    const resultados = await Promise.allSettled(tanda.map((f) => fetchToteatDia(f, creds)));
+    resultados.forEach((r, idx) => {
+      const f = tanda[idx];
+      porDiaMap.set(f, r.status === 'fulfilled' ? r.value : null);
+    });
+    if (i + TAMANO_TANDA < fechas.length) await esperar(PAUSA_MS);
+  }
+
+  const diasConError = [];
+  for (const f of fechas) {
+    if (porDiaMap.get(f) == null) {
+      try {
+        const raw = await fetchToteatDia(f, creds);
+        porDiaMap.set(f, raw);
+      } catch (e) {
+        diasConError.push(f);
+      }
+    }
+  }
+
+  return { porDiaMap, diasConError };
+}
 
 async function fetchToteatDia(fechaYYYYMMDD, creds, intentos = 3) {
   const url = new URL('https://api.toteat.com/mw/or/1.0/sales');
@@ -105,7 +137,7 @@ async function fetchToteatDia(fechaYYYYMMDD, creds, intentos = 3) {
       return (data && data.data) || [];
     } catch (e) {
       ultimoError = e;
-      if (intento < intentos) await esperar(400 * intento);
+      if (intento < intentos) await esperar(300 * intento);
     }
   }
   throw ultimoError;
@@ -147,4 +179,3 @@ function jsonResponse(statusCode, body) {
     body: JSON.stringify(body, null, 2),
   };
 }
-
