@@ -1,38 +1,14 @@
 // netlify/functions/pedido-fabrica.js
 //
 // Junta tres piezas para responder "¿qué le pedimos hoy a la fábrica?":
-//
-//   1. Tendencia de cierre POR PRODUCTO (ventas-fabrica.js) -- cuántas
-//      unidades de cada producto vamos a vender hoy, proyectado.
-//   2. La receta producto -> insumo (Netlify Blobs: recetas.json) -- cuánto
-//      insumo de fábrica consume cada unidad vendida.
-//   3. El stock actual y mínimo de cada insumo (Netlify Blobs: stock.json).
-//
-// Con eso arma, insumo por insumo: cuánto se va a necesitar hoy, cuánto va
-// a quedar de stock al cierre, y si hay que pedir más (y cuánto).
+//   1. Tendencia de cierre POR PRODUCTO (ventas-fabrica.js)
+//   2. La receta producto -> insumo (Netlify Blobs: recetas.json)
+//   3. El stock actual y mínimo de cada insumo (Netlify Blobs: stock.json)
 //
 // GET /.netlify/functions/pedido-fabrica?end=20260828&dias=14
-//   end  -> día que se proyecta (default: hoy)
-//   dias -> cuántos días hacia atrás pedirle a Toteat para tener buen
-//           historial de tendencia, incluyendo "end" (default: 14)
 //
-// Respuesta:
-// {
-//   ok: true,
-//   rangeIni, rangeEnd, fechaProyectada,
-//   alertas: [ ...filas de "detalle" que quedaron bajo el mínimo... ],
-//   detalle: [
-//     { insumo, necesidadHoy, stockActual, stockMinimo,
-//       stockProyectadoFinDia, bajoMinimo, sugeridoPedirAFabrica },
-//     ...
-//   ]
-// }
-//
-// SIMPLIFICACIÓN CONSCIENTE: "sugeridoPedirAFabrica" solo devuelve al
-// insumo exactamente al stockMinimo, no a un buffer arriba de eso. Si
-// quieren siempre quedar con más colchón (ej. mínimo + 1 día extra de
-// venta), ese es el único número a ajustar, en la línea que calcula
-// `sugeridoPedir` más abajo.
+// Usa BLOBS_SITE_ID y BLOBS_TOKEN (variables de entorno) para autenticarse
+// con Netlify Blobs de forma explícita.
 
 const { getStore } = require('@netlify/blobs');
 const { obtenerVentasEnVivo, calcularTendenciaCierrePorProducto } = require('./ventas-fabrica');
@@ -51,7 +27,11 @@ exports.handler = async (event) => {
   const ini = sumarDiasYYYYMMDD(end, -(dias - 1));
 
   try {
-    const store = getStore(STORE_NAME);
+    const store = getStore({
+      name: STORE_NAME,
+      siteID: process.env.BLOBS_SITE_ID,
+      token: process.env.BLOBS_TOKEN,
+    });
     const [recetas, stock] = await Promise.all([
       store.get('recetas', { type: 'json' }),
       store.get('stock', { type: 'json' }),
@@ -74,7 +54,6 @@ exports.handler = async (event) => {
       tendenciaProductos.map((t) => [t.producto, t.unidadesProyectadasCierre])
     );
 
-    // Explota proyección de productos -> necesidad de insumos.
     const necesidadPorInsumo = new Map();
     for (const receta of recetas) {
       const proyeccionProducto = proyeccionPorProducto.get(receta.producto) || 0;
