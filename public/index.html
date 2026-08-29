@@ -3,655 +3,2024 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fábrica · Norai Café</title>
+<title>Dashboard de Ventas — Cafetería</title>
 <style>
-  :root{
-    --bg:#EDEFF2; --panel:#FFFFFF; --ink:#1B1F23; --ink-soft:#5B6472;
-    --line:#D7DBE1; --accent:#2B6777; --accent-ink:#FFFFFF;
-    --warn:#B8860B; --warn-bg:#FBF1D9; --danger:#B3412C; --danger-bg:#FBEAE6;
-    --ok-bg:#E9F4EC; --ok-ink:#2E7D32;
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    background: #f4f5f7;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 20px;
   }
-  *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Space Grotesk","Segoe UI",system-ui,sans-serif;padding:0 16px 100px;}
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; color: #14213d; }
+  .sub { color: #6b7280; font-size: 13px; margin: 0 0 20px; }
 
-  header{
-    position:sticky;top:0;background:var(--bg);z-index:10;
-    padding:20px 0 0;
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 14px; margin-bottom: 20px;
   }
-  h1{font-size:20px;letter-spacing:-0.01em;margin:0 0 12px;}
-
-  .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line);}
-  .tab-btn{
-    border:none;background:none;padding:10px 4px;font-size:14px;font-weight:600;
-    color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-right:16px;
+  .controls select, .controls input {
+    border: 1px solid #d1d5db; border-radius: 8px; padding: 7px 10px; font-size: 13px;
   }
-  .tab-btn.activo{color:var(--accent);border-bottom-color:var(--accent);}
-
-  .tab-panel{display:none;padding-top:4px;}
-  .tab-panel.activo{display:block;}
-
-  .sub{color:var(--ink-soft);font-size:13px;margin:0 0 16px;}
-
-  /* ---- pedido ---- */
-  #fecha{font-family:"JetBrains Mono", monospace;font-size:12.5px;color:var(--ink-soft);margin-bottom:4px;}
-  .alerta-banner{background:var(--danger-bg);border:1px solid #E3B7AB;color:var(--danger);border-radius:10px;padding:12px 14px;font-size:13.5px;font-weight:600;margin-bottom:16px;display:none;}
-  .alerta-banner.visible{display:block;}
-  .ok-banner{background:var(--ok-bg);border:1px solid #B7DABF;color:var(--ok-ink);border-radius:10px;padding:12px 14px;font-size:13.5px;font-weight:600;margin-bottom:16px;display:none;}
-  .ok-banner.visible{display:block;}
-  section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:20px;}
-  section h2{font-size:15px;margin:0 0 12px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:0.03em;color:var(--ink-soft);border-bottom:1px solid var(--line);padding:6px 6px;}
-  td{border-bottom:1px dashed var(--line);padding:7px 6px;font-family:"JetBrains Mono", monospace;font-size:12.5px;}
-  td.nombre{font-family:inherit;font-size:13px;}
-  tr.bajo-minimo td{background:var(--danger-bg);}
-  .num{text-align:right;}
-  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;}
-  .pill.pedir{background:var(--danger);color:#fff;}
-  .pill.ok{background:#D9E9DC;color:var(--ok-ink);}
-  #loading-pedido{color:var(--ink-soft);font-size:13px;}
-
-  /* ---- admin (recetas) ---- */
-  .search{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;margin-bottom:16px;background:var(--panel);}
-  .search:focus{outline:none;border-color:var(--accent);}
-  .categoria{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden;}
-  .categoria-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;user-select:none;}
-  .categoria-header h2{font-size:14px;margin:0;}
-  .categoria-header .count{font-size:12px;color:var(--ink-soft);font-family:"JetBrains Mono",monospace;}
-  .categoria-body{border-top:1px solid var(--line);display:none;}
-  .categoria.abierta .categoria-body{display:block;}
-  .categoria.abierta .chevron{transform:rotate(90deg);}
-  .chevron{transition:transform 0.15s;color:var(--ink-soft);}
-  .producto-row{padding:10px 14px;border-bottom:1px dashed var(--line);}
-  .producto-row:last-child{border-bottom:none;}
-  .producto-top{display:flex;align-items:center;gap:10px;}
-  .producto-top label{flex:1;font-size:13.5px;cursor:pointer;}
-  .producto-top .vendidos{font-size:11px;color:var(--ink-soft);font-family:"JetBrains Mono",monospace;white-space:nowrap;}
-  input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0;}
-  .insumos-box{margin-top:10px;margin-left:28px;padding:10px;background:#F4FAFB;border-radius:8px;display:none;}
-  .producto-row.marcado .insumos-box{display:block;}
-  .insumo-fila{display:flex;gap:6px;margin-bottom:6px;align-items:center;}
-  .insumo-fila input[type="text"]{flex:2;}
-  .insumo-fila input[type="number"]{flex:1;text-align:right;}
-  .insumo-fila input{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:"JetBrains Mono",monospace;font-size:12.5px;background:#fff;}
-  .insumo-fila button{border:none;background:none;color:var(--danger);font-size:15px;cursor:pointer;padding:2px 6px;}
-  .add-insumo{border:1px dashed var(--line);background:none;color:var(--accent);font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;}
-  section.stock{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:20px;}
-  section.stock h2{font-size:15px;margin:0 0 2px;}
-  section.stock p.hint{color:var(--ink-soft);font-size:12.5px;margin:0 0 14px;}
-  td input{width:100%;border:1px solid transparent;background:transparent;font-family:"JetBrains Mono",monospace;font-size:13px;padding:5px 6px;border-radius:6px;color:var(--ink);}
-  td input:focus{outline:none;border-color:var(--accent);background:#F4FAFB;}
-  td input[type="number"]{text-align:right;}
-  .toolbar{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap;}
-  button.add{border:1px dashed var(--line);background:none;color:var(--accent);font-size:13px;font-weight:600;padding:8px 12px;border-radius:8px;cursor:pointer;}
-  button.icon{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:4px;}
-  #loading-admin{color:var(--ink-soft);font-size:13px;padding:20px 0;}
-
-  .barra-guardar{
-    position:fixed;bottom:0;left:0;right:0;background:var(--panel);
-    border-top:1px solid var(--line);padding:12px 16px;display:none;gap:10px;align-items:center;
-    box-shadow:0 -2px 10px rgba(0,0,0,0.05);
+  .controls button {
+    border: 1px solid #2a78d6; background: #2a78d6; color: #fff;
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;
   }
-  .barra-guardar.visible{display:flex;}
-  button.save{border:none;background:var(--accent);color:var(--accent-ink);font-size:14px;font-weight:700;padding:10px 20px;border-radius:8px;cursor:pointer;}
-  .status{font-size:12.5px;}
-  .status.ok{color:#2E7D32;}
-  .status.err{color:var(--danger);}
+  .controls button.ghost { background: #fff; color: #2a78d6; }
+  .controls label { font-size: 12px; color: #6b7280; }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #16a34a;
+    display: inline-block; margin-right: 6px; animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+  .kpis {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px; margin-bottom: 20px;
+  }
+  .kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+  .kpi p.label { font-size: 12px; color: #6b7280; margin: 0 0 6px; }
+  .kpi p.value { font-size: 22px; font-weight: 600; margin: 0; color: #14213d; }
+  .kpi p.delta { font-size: 12px; margin: 4px 0 0; }
+  .up { color: #16a34a; } .down { color: #dc2626; }
+
+  .grid2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; }
+  .card h2 { font-size: 14px; font-weight: 600; margin: 0 0 12px; color: #14213d; }
+  .chart-wrap { position: relative; width: 100%; height: 300px; }
+  .chart-wrap.small { height: 260px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #f0f0f0; }
+  th { color: #6b7280; font-weight: 500; font-size: 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .status { font-size: 13px; color: #6b7280; margin-bottom: 12px; }
+  .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+
+  .calendar { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-top: 10px; width: 280px; }
+  .calendar .calHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .calendar .calHeader button { border: none; background: none; color: #2a78d6; font-size: 15px; cursor: pointer; padding: 2px 8px; }
+  .calendar .calTitle { font-size: 13px; font-weight: 600; color: #14213d; text-transform: capitalize; }
+  .calendar .calGrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .calendar .calDow { font-size: 10px; color: #9ca3af; text-align: center; padding: 2px 0; }
+  .calendar .calDay {
+    font-size: 12px; text-align: center; padding: 6px 0; border-radius: 6px; cursor: pointer;
+    color: #d1d5db; background: #fafafa;
+  }
+  .calendar .calDay.hasData { color: #14213d; background: #dbeafe; font-weight: 600; }
+  .calendar .calDay.hasData:hover { background: #bfdbfe; }
+  .calendar .calDay.noData { cursor: default; }
+  .calendar .calDay.selected { outline: 2px solid #2a78d6; outline-offset: 1px; }
+  .calendar .calDay.empty { visibility: hidden; }
+  .calendar .calLoading { font-size: 12px; color: #9ca3af; text-align: center; padding: 10px 0; }
+
+  .breakeven { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; margin-bottom: 20px; }
+  .breakeven h2 { font-size: 14px; font-weight: 600; margin: 0 0 4px; color: #14213d; }
+  .breakeven .beSub { font-size: 12px; color: #6b7280; margin: 0 0 14px; }
+  .beConfig { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #f0f0f0; }
+  .beConfig label { font-size: 12px; color: #6b7280; }
+  .beConfig input { border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 8px; font-size: 13px; width: 130px; }
+  .beConfig input#metaMensual { width: 110px; text-align: right; }
+  .beConfig button { border: 1px solid #2a78d6; background: #2a78d6; color: #fff; padding: 6px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+  .beGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .beItem p.label { font-size: 12px; color: #6b7280; margin: 0 0 4px; }
+  .beItem p.value { font-size: 19px; font-weight: 600; margin: 0; color: #14213d; }
+  .beBarWrap { grid-column: 1 / -1; margin-top: 4px; }
+  .beBarTrack { background: #f0f0f0; border-radius: 6px; height: 10px; overflow: hidden; }
+  .beBarFill { height: 100%; background: #2a78d6; border-radius: 6px; transition: width .3s; }
+  .beBarFill.ok { background: #16a34a; }
+  .beNote { font-size: 12px; color: #6b7280; margin-top: 8px; }
 </style>
 </head>
 <body>
+<div class="wrap">
+  <h1>Dashboard de ventas — cafetería <span style="font-size:12px; font-weight:400; color:#9ca3af;" id="appVersionBadge">v1.6.0</span></h1>
+  <p class="sub"><span class="live-dot" id="liveDot"></span><span id="liveLabel">Conectando a Toteat…</span> <span id="funcVersionBadge" style="color:#9ca3af;"></span></p>
+  <p id="aperturaBadge" style="font-size:14px; font-weight:600; color:#14213d; background:#eaf2fc; display:inline-block; padding:6px 14px; border-radius:8px; margin:0 0 16px;"></p>
 
-<header>
-  <h1>Fábrica · Norai Café</h1>
-  <div class="tabs">
-    <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
-    <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
-    <button class="tab-btn" data-tab="admin">Recetas y stock</button>
+  <div id="errorBox"></div>
+
+  <div class="controls">
+    <label>Periodo:</label>
+    <select id="periodo">
+      <option value="hoy">Hoy</option>
+      <option value="ayer">Ayer</option>
+      <option value="7d">Últimos 7 días</option>
+      <option value="30d">Últimos 30 días</option>
+      <option value="mes" selected>Este mes</option>
+      <option value="mesPasado">Mes pasado</option>
+      <option value="custom">Rango personalizado</option>
+    </select>
+    <span id="customRange" style="display:none;">
+      <input type="date" id="fechaIni"> a <input type="date" id="fechaEnd">
+    </span>
+    <label style="margin-left:8px;"><input type="checkbox" id="compararToggle"> Comparar con periodo anterior</label>
+    <button id="btnActualizarToteat" style="border:1px solid #eb6834; background:#fff; color:#eb6834;">🔄 Actualizar con Toteat (en vivo)</button>
+    <button class="ghost" id="btnAuto">Auto-refresco: OFF</button>
   </div>
-</header>
+  <p style="font-size:12px; color:#6b7280; margin:-8px 0 20px;">
+    El dashboard se recarga solo al cambiar el periodo (usando lo ya guardado, rápido). "Actualizar con Toteat" refresca hoy en vivo y trae en vivo los días que falten.
+  </p>
 
-<!-- ================= TAB: PEDIDO ================= -->
-<div class="tab-panel activo" id="tab-pedido">
-  <p class="sub">Proyección de venta de hoy, explotada a insumos, comparada contra tu stock.</p>
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-    <button class="add" id="btn-actualizar-toteat">🔄 Actualizar con Toteat (en vivo)</button>
+  <div class="controls" style="margin-top:-8px;">
+    <button id="btnCompararHoraExacta">⏱ Recalcular comparación</button>
+    <input type="date" id="fechaComparar" style="display:none;">
   </div>
-  <div id="fecha"></div>
-  <div id="loading-pedido">Calculando...</div>
-  <div class="alerta-banner" id="banner-alerta"></div>
-  <div class="ok-banner" id="banner-ok">Todo el stock proyectado se mantiene sobre el mínimo. No hay que pedir nada hoy.</div>
-  <section id="seccion-detalle" style="display:none">
-    <h2>Detalle por insumo</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Insumo</th>
-          <th class="num">Necesidad hoy</th>
-          <th class="num">= envases</th>
-          <th class="num">Stock actual</th>
-          <th class="num">Stock proyectado</th>
-          <th class="num">Mínimo</th>
-          <th class="num">Pedir a fábrica</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-detalle"></tbody>
-    </table>
-  </section>
-</div>
+  <div id="comparacionHoraBox" style="margin:-8px 0 20px;"></div>
 
-<!-- ================= TAB: POR EMPEZAR A FABRICAR ================= -->
-<div class="tab-panel" id="tab-fabricar">
-  <p class="sub">Insumos que se demoran más de un día en fabricarse -- mira "hoy + días de elaboración" en vez de solo hoy, para avisar con anticipación.</p>
-  <div id="loading-fabricar">Calculando...</div>
-  <section id="seccion-fabricar" style="display:none">
-    <table>
-      <thead>
-        <tr>
-          <th>Insumo</th>
-          <th class="num">Listo para</th>
-          <th class="num">Venta proyectada</th>
-          <th class="num">Stock actual</th>
-          <th class="num">Mínimo</th>
-          <th class="num">A producir hoy</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-fabricar"></tbody>
-    </table>
-  </section>
-</div>
-
-<!-- ================= TAB: ADMIN (recetas/stock) ================= -->
-<div class="tab-panel" id="tab-admin">
-  <p class="sub">Marca los productos que vienen de fábrica (completos o en parte) y dile cuánto insumo consume cada unidad vendida. La lista viene directo de tus ventas de Toteat de los últimos 7 días.</p>
-  <p class="sub" style="margin-top:-14px;"><strong>Tip:</strong> si el producto completo se elabora en fábrica (ej: un galletón), márcalo y deja el insumo en blanco. Si solo una parte usa un insumo de fábrica (ej: un plato con "lomo vetado sous vide"), escribe ese insumo específico y cuánto usa.</p>
-
-  <div id="loading-admin">Cargando productos desde Toteat...</div>
-  <input type="text" class="search" id="buscador" placeholder="Buscar producto..." style="display:none">
-  <div id="categorias"></div>
-
-  <section class="stock" id="seccion-stock" style="display:none">
-    <h2>Stock de insumos</h2>
-    <p class="hint">Stock actual y mínimo, medidos en <strong>envases</strong> (como te los manda la fábrica). "Tamaño envase" es cuánto trae cada envase, en la MISMA unidad que uses en las recetas de arriba. "Días elaborac." es cuántos días se demora la fábrica en tener listo ESE insumo (ej: 3 para un brownie que se hornea, se enfría y se corta al otro día) -- déjalo en 0 si se puede reponer el mismo día. Con eso, la pestaña "Por empezar a fabricar" te avisa con anticipación.</p>
-    <table id="tabla-stock">
-      <thead><tr><th>Insumo</th><th style="width:80px">Días elaborac.</th><th style="width:80px">Tamaño envase</th><th style="width:80px">Stock (envases)</th><th style="width:80px">Mínimo (envases)</th><th style="width:30px"></th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <div class="toolbar">
-      <button class="add" id="btn-sync-stock">+ Agregar insumos nuevos de las recetas</button>
-      <button class="add" id="btn-add-stock">+ Fila manual</button>
+  <div class="breakeven">
+    <h2>Punto de equilibrio del mes</h2>
+    <p class="beSub" id="beSubtitle">Cargando…</p>
+    <div class="beConfig">
+      <label>Meta mensual ($)</label>
+      <input type="text" inputmode="numeric" id="metaMensual" placeholder="50.000.000">
+      <label>Apertura del local</label>
+      <input type="date" id="fechaApertura">
+      <button id="btnGuardarMeta">Guardar</button>
     </div>
-  </section>
+    <div class="beGrid" id="beGrid"></div>
+    <div class="chart-wrap" id="beChartWrap" style="height:260px; margin-top:16px; display:none;">
+      <canvas id="chartBreakevenTrend"></canvas>
+    </div>
+    <p style="font-size:13px; font-weight:600; margin:20px 0 4px; color:#14213d;" id="chartVentaPorDiaTitle">Venta por día (sin acumular)</p>
+    <div class="chart-wrap" id="beChartDiarioWrap" style="height:260px; display:none;">
+      <canvas id="chartVentaPorDia"></canvas>
+    </div>
+  </div>
+
+  <div id="calendarWrap" style="display:none;">
+    <div class="calendar" id="calendar"></div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div id="badgeFiltroCategoria" style="display:none; margin-bottom:10px; font-size:13px; background:#eaf2fc; color:#14213d; padding:8px 14px; border-radius:8px;">
+    Mostrando solo: <b id="nombreCategoriaFiltrada"></b>
+    <button id="btnQuitarFiltroCategoria" style="margin-left:10px; font-size:12px;">✕ Quitar filtro (o toca fuera de estas tarjetas)</button>
+  </div>
+
+  <div id="zonaFiltrableCategoria">
+    <div class="grid2">
+      <div class="card">
+        <h2>Venta diaria <span style="font-size:11px; color:#6b7280; font-weight:400;">(toca uno o varios días)</span></h2>
+        <div class="chart-wrap"><canvas id="chartDaily"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Venta por categoría <span style="font-size:11px; color:#6b7280; font-weight:400;">(toca una)</span></h2>
+        <div class="chart-wrap small"><canvas id="chartCategory"></canvas></div>
+        <div id="leyendaCategorias" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px 16px; font-size:12px;"></div>
+      </div>
+    </div>
+
+    <div id="badgeFiltroDias" style="display:none; margin:0 0 12px; font-size:13px; background:#eaf2fc; color:#14213d; padding:8px 14px; border-radius:8px;">
+      Mostrando la suma de: <b id="nombreDiasFiltrados"></b>
+      <button id="btnQuitarFiltroDias" style="margin-left:10px; font-size:12px;">✕ Quitar</button>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Venta por hora</h2>
+        <div class="chart-wrap"><canvas id="chartHourly"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Top productos</h2>
+        <table id="tableProducts"><thead><tr><th>Producto</th><th>Cat.</th><th class="num">Unid.</th><th class="num">Venta</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Detalle por categoría</h2>
+    <table id="tableCategories"><thead><tr><th>Categoría</th><th class="num">Unidades</th><th class="num">Venta</th><th class="num">% del total</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2>Análisis interactivo — toca un producto</h2>
+    <p style="font-size:12px; color:#6b7280; margin:0 0 14px;">
+      Toca cualquier barra del gráfico de la izquierda para ver, a la derecha, cómo se vende <b>ese producto puntual</b> por hora y día a día. Vuelve a tocar la misma barra (o el botón) para quitar el filtro.
+    </p>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+      <div>
+        <p style="font-size:13px; font-weight:600; margin:0 0 8px; color:#14213d;">Top productos (toca uno)</p>
+        <div class="chart-wrap" style="height:340px;"><canvas id="chartTopProductosInteractivo"></canvas></div>
+      </div>
+      <div>
+        <p style="font-size:13px; font-weight:600; margin:0 0 8px; color:#14213d;" id="tituloDetalleProducto">Venta por hora (todos los productos)</p>
+        <button id="btnQuitarFiltroProducto" style="display:none; font-size:12px; margin-bottom:6px;">✕ Quitar filtro</button>
+        <div class="chart-wrap" style="height:150px;"><canvas id="chartProductoPorHora"></canvas></div>
+        <p style="font-size:13px; font-weight:600; margin:14px 0 8px; color:#14213d; display:none;" id="tituloProductoPorDia">Venta por día</p>
+        <div class="chart-wrap" style="height:150px; display:none;" id="wrapProductoPorDia"><canvas id="chartProductoPorDia"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2>Datos históricos guardados</h2>
+    <p style="font-size:12px; color:#6b7280; margin:0 0 14px;">
+      Se guardan en un almacén propio (independiente de Toteat), día por día. Si subes la misma fecha de nuevo (aunque sea el mismo archivo repetido, o uno distinto que cubra el mismo día), <b>se reemplaza por completo, nunca se suma encima</b> — así que no hay riesgo de contar una venta dos veces. Dentro de un mismo archivo, cada N° de boleta también se cuenta una sola vez.
+    </p>
+
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px;">
+      <div style="border:1px solid #f0f0f0; border-radius:8px; padding:14px;">
+        <p style="font-size:13px; font-weight:600; margin:0 0 8px; color:#14213d;">1) Subir planilla de Toteat</p>
+        <p style="font-size:12px; color:#6b7280; margin:0 0 10px;">El archivo .csv que exportas desde Toteat ("Ventas Totales"). Puede traer uno o varios días — se separan y guardan solos, usando el N° de boleta para no contar ninguna venta dos veces.</p>
+        <input type="file" id="fileCsv" accept=".csv,.tsv,.txt" multiple style="font-size:12px; margin-bottom:8px; display:block;">
+        <button id="btnProcesarCsv">Procesar y guardar</button>
+      </div>
+      <div style="border:1px solid #f0f0f0; border-radius:8px; padding:14px;">
+        <p style="font-size:13px; font-weight:600; margin:0 0 8px; color:#14213d;">2) Buscar un día puntual en Toteat</p>
+        <p style="font-size:12px; color:#6b7280; margin:0 0 10px;">Le pregunta a la API por ese día exacto y lo guarda. Sirve para confirmar día por día que todo está bien.</p>
+        <input type="date" id="fechaBuscar" style="margin-bottom:8px; display:block;">
+        <button id="btnBuscarDia">Buscar y guardar este día</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px; padding-top:14px; border-top:1px solid #f0f0f0;">
+      <button id="btnDescargarHistorial" style="border:1px solid #16a34a; background:#fff; color:#16a34a;">⬇️ Descargar historial de venta completo</button>
+      <span style="font-size:12px; color:#6b7280; margin-left:8px;">Baja un .json con todos los días guardados -- útil para subirlo a otra app (ej. la de pedidos a fábrica).</span>
+    </div>
+
+    <div id="historicoLog" style="margin-top:14px; font-size:12px; max-height:220px; overflow-y:auto;"></div>
+  </div>
 </div>
 
-<div class="barra-guardar" id="barra-guardar">
-  <button class="save" id="btn-guardar">Guardar todo</button>
-  <span class="status" id="status"></span>
-</div>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
-// ===================== TABS =====================
-const tabButtons = document.querySelectorAll('.tab-btn');
-const tabPanels = document.querySelectorAll('.tab-panel');
-let adminCargado = false;
-let fabricarCargado = false;
+const FUNCTION_URL = '/.netlify/functions/sales-analytics';
+const STORE_URL = '/.netlify/functions/dias-guardados';
+const APP_VERSION = 'v2.20.0';
+document.getElementById('appVersionBadge').textContent = APP_VERSION;
 
-tabButtons.forEach((btn) => {
-  btn.addEventListener('click', () => {
-    tabButtons.forEach((b) => b.classList.remove('activo'));
-    tabPanels.forEach((p) => p.classList.remove('activo'));
-    btn.classList.add('activo');
-    document.getElementById('tab-' + btn.dataset.tab).classList.add('activo');
-
-    const esAdmin = btn.dataset.tab === 'admin';
-    document.getElementById('barra-guardar').classList.toggle('visible', esAdmin);
-
-    if (esAdmin && !adminCargado) {
-      adminCargado = true;
-      cargarAdmin();
-    }
-    if (btn.dataset.tab === 'fabricar' && !fabricarCargado) {
-      fabricarCargado = true;
-      cargarFabricar();
-    }
-  });
-});
-
-// ===================== PEDIDO DE HOY =====================
-(function () {
-  const FN = '/.netlify/functions/pedido-fabrica';
-  const btnActualizar = document.getElementById('btn-actualizar-toteat');
-
-  function horaActualCorta() {
-    const d = new Date();
-    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+async function mostrarVersiones() {
+  try {
+    const r1 = await fetch(`${FUNCTION_URL}?debug=ping`);
+    const j1 = await r1.json();
+    const r2 = await fetch(`${STORE_URL}?debug=ping`);
+    const j2 = await r2.json();
+    const r3 = await fetch('/.netlify/functions/clima?debug=ping');
+    const j3 = await r3.json();
+    document.getElementById('funcVersionBadge').textContent =
+      `· Frontend ${APP_VERSION} · ${j1.version || '?'} · ${j2.version || '?'} · ${j3.version || '?'}`;
+  } catch (e) {
+    document.getElementById('funcVersionBadge').textContent = `· Frontend ${APP_VERSION} · (no se pudo leer versión de funciones)`;
   }
+}
+mostrarVersiones();
 
-  async function cargar() {
-    const loading = document.getElementById('loading-pedido');
-    // limpia estado previo (para que "Actualizar" no vaya acumulando banners viejos)
-    document.getElementById('banner-alerta').classList.remove('visible');
-    document.getElementById('banner-ok').classList.remove('visible');
-    document.getElementById('seccion-detalle').style.display = 'none';
-    loading.style.display = 'block';
-    loading.textContent = 'Calculando...';
+const C1 = '#2a78d6', C2 = '#eb6834', C3 = '#1baf7a', C4 = '#eda100', C5 = '#e87ba4', C6 = '#4a3aa7', C7='#e34948', C8='#008300';
+const PALETTE = [C1,C2,C3,C4,C5,C6,C7,C8];
+const GRID = '#e5e7eb', MUTED = '#6b7280';
+const fmt = v => '$' + Math.round(v).toLocaleString('es-CL');
+const fmtCompact = v => fmt(v); // arriba pedían el peso completo en los ejes, no "20k"/"1.5M"
 
-    try {
-      const res = await fetch(FN);
-      const json = await res.json();
-      loading.style.display = 'none';
+let chartDaily, chartCategory, chartHourly;
+let autoTimer = null;
 
-      if (!json.ok) {
-        loading.style.display = 'block';
-        loading.textContent = 'Error: ' + (json.error || 'desconocido');
-        return;
-      }
+function pad(n){ return String(n).padStart(2,'0'); }
+function toYYYYMMDD(d){ return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`; }
+function toISODate(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 
-      // Línea de estado, al estilo del dashboard de ventas: cuándo se
-      // consultó Toteat y hasta qué boleta llegó la información.
-      let textoFecha = `Datos al ${horaActualCorta()} hrs · Proyectando ${json.fechaProyectada || ''}`;
-      if (json.checkpoint) {
-        try {
-          const cp = json.checkpoint;
-          const horaUltimaBoleta = cp.ultimaHoraConVentas != null ? `${String(cp.ultimaHoraConVentas).padStart(2, '0')}:00 hrs` : 'sin boletas registradas';
-          let horaSinc = '—';
-          if (cp.ultimaSincronizacion) {
-            const d = new Date(cp.ultimaSincronizacion);
-            if (!isNaN(d.getTime())) {
-              horaSinc = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-            }
-          }
-          textoFecha += `\nÚltima sincronización con Toteat: ${horaSinc} hrs · Última boleta vista: ${horaUltimaBoleta} (${cp.fechaHoy || ''}) · ${cp.ordenesHoy ?? '—'} boletas hoy`;
-        } catch (e) {
-          // si algo falla formateando el checkpoint, no rompe el resto de la pantalla
+// "2026-08-21" -> "Vie 21 ago"
+const DOW_CORTO = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+const MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function formatEtiquetaFecha(isoDate) {
+  const d = new Date(isoDate + 'T00:00:00');
+  return `${DOW_CORTO[d.getDay()]} ${d.getDate()} ${MES_CORTO[d.getMonth()]}`;
+}
+
+function getRange(periodo) {
+  const now = new Date();
+  const start = new Date(now);
+  const end = new Date(now);
+  if (periodo === 'hoy') {
+    // start = end = hoy
+  } else if (periodo === 'ayer') {
+    start.setDate(start.getDate()-1); end.setDate(end.getDate()-1);
+  } else if (periodo === '7d') {
+    start.setDate(start.getDate()-6);
+  } else if (periodo === '30d') {
+    start.setDate(start.getDate()-29);
+  } else if (periodo === 'mes') {
+    start.setDate(1);
+  } else if (periodo === 'mesPasado') {
+    start.setMonth(start.getMonth()-1, 1);
+    end.setDate(0);
+  } else if (periodo === 'custom') {
+    const ini = document.getElementById('fechaIni').value;
+    const fin = document.getElementById('fechaEnd').value;
+    if (ini && fin) return { ini: ini.replace(/-/g,''), end: fin.replace(/-/g,'') };
+  }
+  return { ini: toYYYYMMDD(start), end: toYYYYMMDD(end) };
+}
+
+function getCompareRange(periodo, mainRange) {
+  const iniD = parseYYYYMMDD(mainRange.ini);
+  const endD = parseYYYYMMDD(mainRange.end);
+  const days = Math.round((endD - iniD) / 86400000) + 1;
+  const cEnd = new Date(iniD); cEnd.setDate(cEnd.getDate()-1);
+  const cIni = new Date(cEnd); cIni.setDate(cIni.getDate()-(days-1));
+  return { ini: toYYYYMMDD(cIni), end: toYYYYMMDD(cEnd) };
+}
+function parseYYYYMMDD(s){ return new Date(s.slice(0,4), s.slice(4,6)-1, s.slice(6,8)); }
+function yyyymmddToISO(s){ return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`; }
+function isoToYYYYMMDD(s){ return s.replace(/-/g,''); }
+function siguienteDiaISO(iso) { const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+1); return toISODate(d); }
+
+function isoRangeDates(iniISO, endISO) {
+  const dias = [];
+  const cursor = new Date(iniISO + 'T00:00:00');
+  const fin = new Date(endISO + 'T00:00:00');
+  while (cursor <= fin) {
+    dias.push(toISODate(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dias;
+}
+
+// Agrupa fechas ISO consecutivas en tramos [{inicio,fin}, ...] para pedirle
+// a Toteat lo menos de veces posible cuando faltan varios días seguidos.
+function agruparConsecutivos(fechasISO) {
+  const grupos = [];
+  let actual = null;
+  for (const f of fechasISO) {
+    if (actual && siguienteDiaISO(actual.fin) === f) {
+      actual.fin = f;
+    } else {
+      if (actual) grupos.push(actual);
+      actual = { inicio: f, fin: f };
+    }
+  }
+  if (actual) grupos.push(actual);
+  return grupos;
+}
+
+// Suma varios resúmenes (cada uno con el mismo formato que "summary" de
+// sales-analytics) en uno solo -- así se puede combinar lo que ya está
+// guardado con lo que se trajo en vivo de Toteat.
+function mergeResumenes(lista) {
+  let totalRevenue = 0, totalOrders = 0;
+  const byCategory = new Map(), byProduct = new Map(), byHour = new Map();
+  const byProductHour = new Map(); // "nombre|hora" -> {revenue, quantity}
+  let dailyAll = [];
+  let diasConError = [];
+
+  for (const s of lista) {
+    totalRevenue += s.totalRevenue || 0;
+    totalOrders += s.totalOrders || 0;
+    (s.categories || []).forEach((c) => {
+      const e = byCategory.get(c.name) || { revenue: 0, quantity: 0 };
+      e.revenue += c.revenue; e.quantity += c.quantity;
+      byCategory.set(c.name, e);
+    });
+    (s.products || []).forEach((p) => {
+      const e = byProduct.get(p.name) || { revenue: 0, quantity: 0, category: p.category };
+      e.revenue += p.revenue; e.quantity += p.quantity;
+      byProduct.set(p.name, e);
+    });
+    (s.hourly || []).forEach((h) => {
+      const e = byHour.get(h.hour) || { revenue: 0, orders: 0 };
+      e.revenue += h.revenue; e.orders += h.orders;
+      byHour.set(h.hour, e);
+    });
+    if (s.productsByHour) {
+      for (const nombre of Object.keys(s.productsByHour)) {
+        for (const hora of Object.keys(s.productsByHour[nombre])) {
+          const v = s.productsByHour[nombre][hora];
+          const clave = nombre + '|' + hora;
+          const e = byProductHour.get(clave) || { revenue: 0, quantity: 0 };
+          e.revenue += v.revenue; e.quantity += v.quantity;
+          byProductHour.set(clave, e);
         }
       }
-      textoFecha += `\nHistorial usado: ${json.rangeIni || ''}–${json.rangeEnd || ''}`;
-      document.getElementById('fecha').textContent = textoFecha;
-      document.getElementById('fecha').style.whiteSpace = 'pre-line';
-
-      if (json.nota) {
-        loading.style.display = 'block';
-        loading.textContent = json.nota;
-        return;
-      }
-
-      const detalle = json.detalle || [];
-      const alertas = json.alertas || [];
-
-      if (alertas.length) {
-        const banner = document.getElementById('banner-alerta');
-        banner.classList.add('visible');
-        banner.textContent = `⚠ ${alertas.length} insumo(s) van a quedar bajo el mínimo hoy: ` + alertas.map((a) => a.insumo).join(', ');
-      } else {
-        document.getElementById('banner-ok').classList.add('visible');
-      }
-
-      if (detalle.length) {
-        document.getElementById('seccion-detalle').style.display = 'block';
-        const tbody = document.getElementById('tbody-detalle');
-        tbody.innerHTML = '';
-        detalle.forEach((d) => {
-          const tr = document.createElement('tr');
-          if (d.bajoMinimo) tr.classList.add('bajo-minimo');
-          tr.innerHTML = `
-            <td class="nombre">${d.insumo}${d.tamanoEnvase > 1 ? ` <span style="color:var(--ink-soft);font-size:11px;">(envase = ${d.tamanoEnvase})</span>` : ''}</td>
-            <td class="num">${d.necesidadHoyUnidadReceta}</td>
-            <td class="num">${d.necesidadHoyEnvases}</td>
-            <td class="num">${d.stockActual}</td>
-            <td class="num">${d.stockProyectadoFinDia}</td>
-            <td class="num">${d.stockMinimo}</td>
-            <td class="num">${d.sugeridoPedirAFabrica > 0
-              ? `<span class="pill pedir">${d.sugeridoPedirAFabrica}</span>`
-              : `<span class="pill ok">—</span>`}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-      }
-    } catch (e) {
-      loading.style.display = 'block';
-      loading.textContent = 'Error de conexión: ' + e.message;
     }
+    dailyAll = dailyAll.concat(s.daily || []);
+    if (s.diasConError) diasConError = diasConError.concat(s.diasConError);
   }
 
-  btnActualizar.addEventListener('click', async () => {
-    btnActualizar.disabled = true;
-    const textoOriginal = btnActualizar.textContent;
-    btnActualizar.textContent = '🔄 Actualizando...';
-    await cargar();
-    btnActualizar.textContent = textoOriginal;
-    btnActualizar.disabled = false;
+  const categories = [...byCategory.entries()]
+    .map(([name, v]) => ({ name, revenue: Math.round(v.revenue), quantity: v.quantity, pct: totalRevenue>0? Math.round(v.revenue/totalRevenue*1000)/10 : 0 }))
+    .sort((a,b) => b.revenue - a.revenue);
+  const products = [...byProduct.entries()]
+    .map(([name, v]) => ({ name, revenue: Math.round(v.revenue), quantity: v.quantity, category: v.category }))
+    .sort((a,b) => b.revenue - a.revenue);
+  const hourly = [...byHour.entries()]
+    .map(([hour, v]) => ({ hour, revenue: Math.round(v.revenue), orders: v.orders }))
+    .sort((a,b) => a.hour.localeCompare(b.hour));
+
+  const productsByHour = {};
+  for (const [clave, v] of byProductHour.entries()) {
+    const idx = clave.lastIndexOf('|');
+    const nombre = clave.slice(0, idx);
+    const hora = clave.slice(idx + 1);
+    if (!productsByHour[nombre]) productsByHour[nombre] = {};
+    productsByHour[nombre][hora] = { revenue: Math.round(v.revenue), quantity: v.quantity };
+  }
+
+  const dailyMap = new Map();
+  dailyAll.forEach((d) => {
+    const e = dailyMap.get(d.date) || { revenue: 0, orders: 0 };
+    e.revenue += d.revenue; e.orders += d.orders;
+    dailyMap.set(d.date, e);
   });
+  const daily = [...dailyMap.entries()]
+    .map(([date, v]) => ({ date, revenue: Math.round(v.revenue), orders: v.orders, avgTicket: v.orders>0? Math.round(v.revenue/v.orders):0 }))
+    .sort((a,b) => a.date.localeCompare(b.date));
 
-  cargar();
-})();
+  return {
+    ok: true,
+    totalRevenue: Math.round(totalRevenue),
+    totalOrders,
+    avgTicket: totalOrders>0? Math.round(totalRevenue/totalOrders) : 0,
+    categories, products, hourly, daily, productsByHour,
+    diasConError: diasConError.length ? diasConError : undefined,
+  };
+}
 
-// ===================== POR EMPEZAR A FABRICAR =====================
-async function cargarFabricar() {
-  const loading = document.getElementById('loading-fabricar');
+// Trae, para [iniYYYYMMDD, endYYYYMMDD], primero lo que ya esté guardado en
+// el caché propio (Netlify Blobs). Si modoLive=true, además le pregunta a
+// Toteat en vivo por los días que falten -- si modoLive=false (por defecto
+// al cargar la página), NO llama a Toteat para nada, solo usa lo guardado,
+// para evitar que cada carga dispare peticiones automáticas a la API.
+async function obtenerResumenConCache(iniYYYYMMDD, endYYYYMMDD, modoLive) {
+  const iniISO = yyyymmddToISO(iniYYYYMMDD);
+  const endISO = yyyymmddToISO(endYYYYMMDD);
+  const todasLasFechas = isoRangeDates(iniISO, endISO);
+
+  let guardados = new Map();
   try {
-    const res = await fetch('/.netlify/functions/pronostico-fabricacion');
+    const res = await fetch(`${STORE_URL}?ini=${iniISO}&end=${endISO}`);
     const json = await res.json();
-    loading.style.display = 'none';
-
-    if (!json.ok) {
-      loading.style.display = 'block';
-      loading.textContent = 'Error: ' + (json.error || 'desconocido');
-      return;
-    }
-    if (json.nota) {
-      loading.style.display = 'block';
-      loading.textContent = json.nota;
-      return;
-    }
-
-    const items = json.items || [];
-    if (!items.length) {
-      loading.style.display = 'block';
-      loading.textContent = 'No hay insumos con días de elaboración configurados.';
-      return;
-    }
-
-    document.getElementById('seccion-fabricar').style.display = 'block';
-    const tbody = document.getElementById('tbody-fabricar');
-    tbody.innerHTML = '';
-    items.forEach((it) => {
-      const tr = document.createElement('tr');
-      if (it.necesitaProducir) tr.classList.add('bajo-minimo');
-      tr.innerHTML = `
-        <td class="nombre">${it.insumo}</td>
-        <td class="num">${it.diaSemanaObjetivo} ${it.fechaObjetivo} <span style="color:var(--ink-soft);">(+${it.diasElaboracion}d)</span></td>
-        <td class="num">${it.ventaPromedioProyectada}</td>
-        <td class="num">${it.stockActual}</td>
-        <td class="num">${it.stockMinimo}</td>
-        <td class="num">${it.necesitaProducir
-          ? `<span class="pill pedir">${it.unidadesAProducir}</span>`
-          : `<span class="pill ok">—</span>`}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    if (json.ok) (json.dias || []).forEach((d) => guardados.set(d.fecha, d.data));
   } catch (e) {
-    loading.style.display = 'block';
-    loading.textContent = 'Error de conexión: ' + e.message;
-  }
-}
-
-// ===================== RECETAS Y STOCK =====================
-let categorias = [];
-let mapaInsumos = {};
-let stockFilas = [];
-
-function cargarAdmin() {
-  const FN_PRODUCTOS = '/.netlify/functions/productos-toteat';
-  const FN_DATOS = '/.netlify/functions/fabrica-datos';
-
-  (async function () {
-    const [resProd, resRecetas, resStock] = await Promise.all([
-      fetch(FN_PRODUCTOS).then((r) => r.json()),
-      fetch(`${FN_DATOS}?key=recetas`).then((r) => r.json()),
-      fetch(`${FN_DATOS}?key=stock`).then((r) => r.json()),
-    ]);
-
-    document.getElementById('loading-admin').style.display = 'none';
-
-    if (!resProd.ok) {
-      document.getElementById('loading-admin').style.display = 'block';
-      document.getElementById('loading-admin').textContent = 'Error trayendo productos: ' + (resProd.error || '');
-      return;
-    }
-
-    categorias = resProd.categorias || [];
-    stockFilas = (resStock.data || []);
-
-    (resRecetas.data || []).forEach((r) => {
-      if (!mapaInsumos[r.producto]) mapaInsumos[r.producto] = [];
-      mapaInsumos[r.producto].push({ insumo: r.insumo, cantidadTexto: formatCantidad(r.cantidadPorUnidad, r.unidad || 'un') });
-    });
-
-    document.getElementById('buscador').style.display = 'block';
-    document.getElementById('seccion-stock').style.display = 'block';
-    renderCategorias();
-    renderStock();
-  })();
-}
-
-function renderCategorias(filtro = '') {
-  const cont = document.getElementById('categorias');
-  cont.innerHTML = '';
-  const f = filtro.trim().toLowerCase();
-
-  categorias.forEach((cat, ci) => {
-    const productosFiltrados = f ? cat.productos.filter((p) => p.producto.toLowerCase().includes(f)) : cat.productos;
-    if (f && productosFiltrados.length === 0) return;
-
-    const div = document.createElement('div');
-    div.className = 'categoria' + (f ? ' abierta' : '');
-    div.innerHTML = `
-      <div class="categoria-header" data-toggle="${ci}">
-        <h2>${cat.categoria}</h2>
-        <span class="count">${productosFiltrados.length} producto(s) <span class="chevron">›</span></span>
-      </div>
-      <div class="categoria-body" id="cat-body-${ci}"></div>
-    `;
-    cont.appendChild(div);
-
-    const body = div.querySelector('.categoria-body');
-    productosFiltrados.forEach((p) => body.appendChild(renderProducto(p)));
-  });
-
-  cont.querySelectorAll('.categoria-header').forEach((h) => {
-    h.addEventListener('click', () => h.closest('.categoria').classList.toggle('abierta'));
-  });
-}
-
-function renderProducto(p) {
-  const marcado = !!mapaInsumos[p.producto];
-  const row = document.createElement('div');
-  row.className = 'producto-row' + (marcado ? ' marcado' : '');
-  row.dataset.producto = p.producto;
-
-  row.innerHTML = `
-    <div class="producto-top">
-      <input type="checkbox" ${marcado ? 'checked' : ''}>
-      <label>${p.producto}</label>
-      <span class="vendidos">${p.unidadesVendidas} u. · $${formatoMonto(p.precioUnitario)} c/u · 7 días</span>
-    </div>
-    <div class="insumos-box"></div>
-  `;
-
-  const checkbox = row.querySelector('input[type="checkbox"]');
-  const insumosBox = row.querySelector('.insumos-box');
-
-  function pintarInsumos() {
-    insumosBox.innerHTML = '';
-    const filas = mapaInsumos[p.producto] || [];
-    filas.forEach((f, idx) => insumosBox.appendChild(filaInsumo(p.producto, idx, f)));
-    const btn = document.createElement('button');
-    btn.className = 'add-insumo';
-    btn.textContent = '+ insumo';
-    btn.addEventListener('click', () => {
-      mapaInsumos[p.producto] = mapaInsumos[p.producto] || [];
-      mapaInsumos[p.producto].push({ insumo: '', cantidadTexto: '' });
-      pintarInsumos();
-    });
-    insumosBox.appendChild(btn);
+    // si el store falla, seguimos con lo que haya (nada, en este caso)
   }
 
-  function filaInsumo(producto, idx, f) {
-    const fila = document.createElement('div');
-    fila.className = 'insumo-fila';
-    fila.innerHTML = `
-      <input type="text" placeholder="Insumo (ej: Lomo vetado sellado al vacío)" value="${escapeAttr(f.insumo)}">
-      <input type="text" placeholder="100 g / 1 un" value="${escapeAttr(f.cantidadTexto || '')}" style="flex:1;text-align:right;">
-      <button title="Quitar">✕</button>
-    `;
-    const [inputInsumo, inputCant] = fila.querySelectorAll('input');
-    inputInsumo.addEventListener('input', () => { mapaInsumos[producto][idx].insumo = inputInsumo.value; });
-    inputCant.addEventListener('input', () => { mapaInsumos[producto][idx].cantidadTexto = inputCant.value; });
-    fila.querySelector('button').addEventListener('click', () => {
-      mapaInsumos[producto].splice(idx, 1);
-      if (mapaInsumos[producto].length === 0) delete mapaInsumos[producto];
-      pintarInsumos();
-    });
-    return fila;
+  const faltantes = todasLasFechas.filter((f) => !guardados.has(f));
+  const resumenesGuardados = todasLasFechas.filter((f) => guardados.has(f)).map((f) => guardados.get(f));
+
+  // No tiene sentido pedirle a Toteat días de ANTES de que el local abriera
+  // (nunca va a haber ventas ahí) -- eso era lo que hacía lento/atascado
+  // "Actualizar con Toteat" cuando el periodo incluía días previos a la
+  // apertura, ej. "Este mes" completo. Los saltamos directo.
+  const aperturaStr = localStorage.getItem('fechaApertura') || '';
+  const faltantesEnRangoOperativo = aperturaStr ? faltantes.filter((f) => f >= aperturaStr) : faltantes;
+
+  const resumenesEnVivo = [];
+  if (modoLive && faltantesEnRangoOperativo.length > 0) {
+    const grupos = agruparConsecutivos(faltantesEnRangoOperativo);
+    for (const g of grupos) {
+      const url = `${FUNCTION_URL}?ini=${isoToYYYYMMDD(g.inicio)}&end=${isoToYYYYMMDD(g.fin)}`;
+      const res = await fetch(url);
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Toteat no respondió bien para ' + g.inicio + ' a ' + g.fin);
+      resumenesEnVivo.push(json.summary);
+    }
   }
 
-  if (marcado) pintarInsumos();
-
-  checkbox.addEventListener('change', () => {
-    if (checkbox.checked) {
-      row.classList.add('marcado');
-      if (!mapaInsumos[p.producto]) mapaInsumos[p.producto] = [{ insumo: '', cantidadTexto: '' }];
-      pintarInsumos();
-    } else {
-      row.classList.remove('marcado');
-      delete mapaInsumos[p.producto];
-    }
-  });
-
-  return row;
+  const merged = mergeResumenes([...resumenesGuardados, ...resumenesEnVivo]);
+  const faltantesSinTraer = modoLive ? 0 : faltantesEnRangoOperativo.length;
+  merged.fuente = resumenesEnVivo.length > 0
+    ? (resumenesGuardados.length === 0 ? 'toteat' : 'mixto')
+    : 'guardado';
+  merged.diasGuardadosUsados = resumenesGuardados.length;
+  merged.diasSinDatos = faltantesSinTraer;
+  merged.diasEnVivoUsados = resumenesEnVivo.length;
+  // Para el análisis interactivo por producto (venta por día de un producto
+  // puntual) -- solo se puede armar con precisión usando los días GUARDADOS,
+  // que sí traen el detalle de productos por día individual.
+  merged.diasCrudos = todasLasFechas.filter((f) => guardados.has(f)).map((f) => ({ fecha: f, data: guardados.get(f) }));
+  return merged;
 }
 
-function escapeAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
-function formatoMonto(n) { return Math.round(Number(n) || 0).toLocaleString('es-CL'); }
+async function cargarDatos(modoLive) {
+  modoLive = modoLive === true; // por defecto false: solo datos guardados
+  const periodo = document.getElementById('periodo').value;
+  const range = getRange(periodo);
+  const comparar = document.getElementById('compararToggle').checked;
 
-// Interpreta texto libre como "200", "200 g", "0.2 kg", "1 un" -> siempre
-// normaliza a gramos (si es peso) o a unidades (si no se especifica peso).
-function parseCantidad(texto) {
-  const str = String(texto || '').trim().toLowerCase().replace(',', '.');
-  const match = str.match(/^([\d.]+)\s*(kg|kilos?|g|gr|gramos?|un|und|unidad(?:es)?)?$/);
-  if (!match) return null;
-  const num = parseFloat(match[1]);
-  if (isNaN(num)) return null;
-  const u = match[2] || 'un';
-  if (/^(kg|kilos?)$/.test(u)) return { valor: num * 1000, unidad: 'g' };
-  if (/^(g|gr|gramos?)$/.test(u)) return { valor: num, unidad: 'g' };
-  return { valor: num, unidad: 'un' };
-}
+  document.getElementById('liveLabel').textContent = modoLive ? 'Sincronizando con Toteat…' : 'Cargando datos guardados…';
+  document.getElementById('errorBox').innerHTML = '';
 
-// Formatea de vuelta a texto legible para mostrar en el campo.
-function formatCantidad(valor, unidad) {
-  const n = Number(valor) || 0;
-  if (unidad === 'g') {
-    if (n >= 1000 && n % 1000 === 0) return `${n / 1000} kg`;
-    return `${n} g`;
-  }
-  return `${n} un`;
-}
-
-document.getElementById('buscador').addEventListener('input', (e) => renderCategorias(e.target.value));
-
-function filaStock(r = {}) {
-  const tr = document.createElement('tr');
-  const envaseTexto = r.tamanoEnvaseTexto ?? formatCantidad(r.tamanoEnvase ?? 1, r.unidadEnvase || 'un');
-  tr.innerHTML = `
-    <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}"></td>
-    <td><input type="number" step="1" min="0" data-field="diasElaboracion" value="${r.diasElaboracion ?? 0}"></td>
-    <td><input type="text" data-field="tamanoEnvaseTexto" placeholder="1000 g / 1 un" value="${escapeAttr(envaseTexto)}"></td>
-    <td><input type="number" step="0.1" data-field="stockActual" value="${r.stockActual ?? ''}"></td>
-    <td><input type="number" step="0.1" data-field="stockMinimo" value="${r.stockMinimo ?? ''}"></td>
-    <td><button class="icon" data-remove>✕</button></td>
-  `;
-  return tr;
-}
-
-function renderStock() {
-  const tbody = document.querySelector('#tabla-stock tbody');
-  tbody.innerHTML = '';
-  stockFilas.forEach((r) => tbody.appendChild(filaStock(r)));
-}
-
-document.getElementById('btn-add-stock').addEventListener('click', () => {
-  document.querySelector('#tabla-stock tbody').appendChild(filaStock());
-});
-
-document.getElementById('btn-sync-stock').addEventListener('click', () => {
-  const insumosEnUso = new Set();
-  Object.entries(mapaInsumos).forEach(([producto, filas]) => {
-    const conTexto = filas.filter((f) => f.insumo);
-    if (conTexto.length) {
-      conTexto.forEach((f) => insumosEnUso.add(f.insumo));
-    } else {
-      insumosEnUso.add(producto);
-    }
-  });
-  const yaEnStock = new Set([...document.querySelectorAll('#tabla-stock [data-field="insumo"]')].map((i) => i.value));
-  const tbody = document.querySelector('#tabla-stock tbody');
-  let agregados = 0;
-  insumosEnUso.forEach((insumo) => {
-    if (!yaEnStock.has(insumo)) {
-      tbody.appendChild(filaStock({ insumo, diasElaboracion: 0, tamanoEnvase: 1, stockActual: 0, stockMinimo: 0 }));
-      agregados++;
-    }
-  });
-  document.getElementById('status').textContent = agregados
-    ? `${agregados} insumo(s) agregado(s) al stock, completa las cantidades.`
-    : 'No hay insumos nuevos para agregar.';
-  document.getElementById('status').className = 'status ok';
-});
-
-document.body.addEventListener('click', (e) => {
-  if (e.target.matches('[data-remove]')) e.target.closest('tr').remove();
-});
-
-function leerStockTabla() {
-  const filas = [...document.querySelectorAll('#tabla-stock tbody tr')];
-  return filas.map((tr) => {
-    const obj = {};
-    tr.querySelectorAll('input').forEach((input) => {
-      if (input.dataset.field === 'tamanoEnvaseTexto') return;
-      obj[input.dataset.field] = input.type === 'number' ? Number(input.value) : input.value.trim();
-    });
-    const envaseInput = tr.querySelector('[data-field="tamanoEnvaseTexto"]');
-    const parsed = parseCantidad(envaseInput ? envaseInput.value : '') || { valor: 1, unidad: 'un' };
-    obj.tamanoEnvase = parsed.valor;
-    obj.unidadEnvase = parsed.unidad;
-    return obj;
-  }).filter((o) => o.insumo);
-}
-
-function leerRecetas() {
-  const recetas = [];
-  Object.entries(mapaInsumos).forEach(([producto, filas]) => {
-    const filasValidas = [];
-    filas.forEach((f) => {
-      if (!f.insumo) return;
-      const parsed = parseCantidad(f.cantidadTexto);
-      if (parsed && parsed.valor > 0) {
-        filasValidas.push({ insumo: f.insumo.trim(), cantidadPorUnidad: parsed.valor, unidad: parsed.unidad });
+  // Rangos grandes (7/30 días) a veces tardan más en responder desde Toteat.
+  // Reintentamos una vez en silencio antes de mostrar error al usuario.
+  const intentos = 2;
+  let ultimoError = null;
+  for (let intento = 1; intento <= intentos; intento++) {
+    try {
+      const summary = await obtenerResumenConCache(range.ini, range.end, modoLive);
+      let compareSummary = null;
+      if (comparar) {
+        const cmp = getCompareRange(periodo, range);
+        compareSummary = await obtenerResumenConCache(cmp.ini, cmp.end, modoLive);
       }
-    });
-    if (filasValidas.length > 0) {
-      filasValidas.forEach((f) => recetas.push({ producto, insumo: f.insumo, cantidadPorUnidad: f.cantidadPorUnidad, unidad: f.unidad }));
-    } else {
-      recetas.push({ producto, insumo: producto, cantidadPorUnidad: 1, unidad: 'un' });
+      render({ summary, compare: compareSummary });
+      const now = new Date();
+      let fuenteTxt;
+      if (summary.fuente === 'guardado' && summary.diasSinDatos > 0) {
+        fuenteTxt = ` · desde caché (${summary.diasSinDatos} día(s) sin datos guardados aún -- usa "Actualizar con Toteat" para traerlos)`;
+      } else if (summary.fuente === 'guardado') {
+        fuenteTxt = ' · 100% desde caché guardado';
+      } else if (summary.fuente === 'mixto') {
+        fuenteTxt = ` · ${summary.diasGuardadosUsados} día(s) de caché + Toteat en vivo`;
+      } else {
+        fuenteTxt = ' · en vivo desde Toteat';
+      }
+      document.getElementById('liveLabel').textContent = 'Datos al ' + now.toLocaleTimeString('es-CL') + fuenteTxt;
+      return;
+    } catch (e) {
+      ultimoError = e;
+      if (intento < intentos) {
+        document.getElementById('liveLabel').textContent = 'Reintentando…';
+        await new Promise((r) => setTimeout(r, 1500));
+      }
     }
-  });
-  return recetas;
+  }
+  {
+    const e = ultimoError;
+    document.getElementById('errorBox').innerHTML = `<div class="error">No se pudo cargar desde Toteat: ${e.message}. Revisa las variables de entorno y que la función esté desplegada (probar /.netlify/functions/sales-analytics?debug=ping).</div>`;
+    document.getElementById('liveLabel').textContent = 'Sin conexión';
+  }
 }
 
-document.getElementById('btn-guardar').addEventListener('click', async () => {
-  const FN_DATOS = '/.netlify/functions/fabrica-datos';
-  const statusEl = document.getElementById('status');
-  statusEl.textContent = 'Guardando...';
-  statusEl.className = 'status';
-  try {
-    const recetas = leerRecetas();
-    const stock = leerStockTabla();
+function render(data) {
+  const s = data.summary;
+  const c = data.compare;
+  window.ultimoSummaryPrincipal = s;
+  window.ultimoCompareSummary = c;
+  categoriaSeleccionada = null;
+  document.getElementById('badgeFiltroCategoria').style.display = 'none';
+  diasSeleccionados.clear();
+  document.getElementById('badgeFiltroDias').style.display = 'none';
 
-    const [r1, r2] = await Promise.all([
-      fetch(FN_DATOS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'recetas', data: recetas }) }),
-      fetch(FN_DATOS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'stock', data: stock }) }),
-    ]);
-    const j1 = await r1.json(), j2 = await r2.json();
-    if (!j1.ok || !j2.ok) throw new Error(j1.error || j2.error || 'Error desconocido');
+  renderKpis(s, c);
+  renderDaily(s, c);
+  renderCategory(s);
+  renderHourly(s);
+  renderTables(s);
+  renderAnalisisInteractivo(s, s.diasCrudos || []);
 
-    statusEl.textContent = `Guardado: ${j1.guardado} recetas, ${j2.guardado} insumos en stock.`;
-    statusEl.className = 'status ok';
-  } catch (e) {
-    statusEl.textContent = 'Error: ' + e.message;
-    statusEl.className = 'status err';
+  if (s.diasConError && s.diasConError.length > 0) {
+    const fechas = s.diasConError.map((d) => `${d.slice(6,8)}-${d.slice(4,6)}-${d.slice(0,4)}`).join(', ');
+    document.getElementById('errorBox').innerHTML = `<div class="error">⚠️ No se pudieron traer ${s.diasConError.length} día(s) de Toteat después de varios intentos: ${fechas}. Los totales mostrados NO incluyen esos días. Toca "Actualizar" para reintentar.</div>`;
+  }
+}
+
+function pctDelta(curr, prev) {
+  if (prev === 0 || prev == null) return null;
+  return ((curr - prev) / prev) * 100;
+}
+
+function renderKpis(s, c) {
+  const kpis = [
+    { label: 'Venta total', value: fmt(s.totalRevenue), curr: s.totalRevenue, prev: c ? c.totalRevenue : null },
+    { label: 'N° de órdenes', value: s.totalOrders.toLocaleString('es-CL'), curr: s.totalOrders, prev: c ? c.totalOrders : null },
+    { label: 'Ticket promedio', value: fmt(s.avgTicket), curr: s.avgTicket, prev: c ? c.avgTicket : null },
+    { label: 'Categoría líder', value: s.categories[0] ? s.categories[0].name : '—', curr: null, prev: null },
+  ];
+  document.getElementById('kpis').innerHTML = kpis.map(k => {
+    let deltaHtml = '';
+    if (k.prev != null) {
+      const d = pctDelta(k.curr, k.prev);
+      if (d != null) {
+        const cls = d >= 0 ? 'up' : 'down';
+        const sign = d >= 0 ? '+' : '';
+        deltaHtml = `<p class="delta ${cls}">${sign}${d.toFixed(1)}% vs periodo anterior</p>`;
+      }
+    }
+    return `<div class="kpi"><p class="label">${k.label}</p><p class="value">${k.value}</p>${deltaHtml}</div>`;
+  }).join('');
+}
+
+function renderDaily(s, c) {
+  if (chartDaily) chartDaily.destroy();
+  const fechas = s.daily.map((d) => d.date);
+  const labels = s.daily.map(d => formatEtiquetaFecha(d.date));
+  const puntoColor = (idx) => diasSeleccionados.has(fechas[idx]) ? C2 : C1;
+  const puntoRadio = (idx) => diasSeleccionados.has(fechas[idx]) ? 6 : 3;
+  const datasets = [{
+    label: 'Periodo actual', data: s.daily.map(d => d.revenue),
+    borderColor: C1, backgroundColor: C1+'22', fill:true, tension:0.25,
+    pointRadius: s.daily.map((d, idx) => puntoRadio(idx)),
+    pointBackgroundColor: s.daily.map((d, idx) => puntoColor(idx)),
+    pointBorderColor: s.daily.map((d, idx) => puntoColor(idx)),
+  }];
+  if (c) {
+    datasets.push({ label: 'Periodo anterior', data: c.daily.map(d => d.revenue), borderColor: C2, backgroundColor: 'transparent', borderDash:[5,4], tension:0.25, pointRadius:0 });
+  }
+  chartDaily = new Chart(document.getElementById('chartDaily'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+      plugins:{ legend:{ display: !!c, labels:{boxWidth:10,font:{size:11}} }, tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+fmt(ctx.raw)}} },
+      scales:{ x:{grid:{display:false},ticks:{color:MUTED,font:{size:10},maxRotation:90,minRotation:90}}, y:{grid:{color:GRID},ticks:{color:MUTED,callback:v=>fmtCompact(v)}} },
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const idx = elements[0].index;
+        const fecha = fechas[idx];
+        if (diasSeleccionados.has(fecha)) diasSeleccionados.delete(fecha);
+        else diasSeleccionados.add(fecha);
+        actualizarVistaPorDiasSeleccionados();
+      },
+    }
+  });
+}
+
+let diasSeleccionados = new Set();
+
+function actualizarVistaPorDiasSeleccionados() {
+  const badge = document.getElementById('badgeFiltroDias');
+
+  // Refresca también el resaltado de barras en "Venta por día (sin acumular)"
+  // (la de la tarjeta de punto de equilibrio) -- es un gráfico distinto al
+  // de "Venta diaria" de arriba, pero comparte la misma selección de días.
+  if (window.ultimoVentaPorDiaArgs) {
+    const a = window.ultimoVentaPorDiaArgs;
+    renderVentaPorDia(a.labels, a.serieDiaria, a.fechasISO);
+  }
+
+  // Elegir días desactiva cualquier filtro de categoría activo -- combinar
+  // ambos filtros a la vez se pone confuso, así que priorizamos uno u otro.
+  categoriaSeleccionada = null;
+  document.getElementById('badgeFiltroCategoria').style.display = 'none';
+
+  if (diasSeleccionados.size === 0) {
+    badge.style.display = 'none';
+    renderCategory(window.ultimoSummaryPrincipal);
+    renderHourly(window.ultimoSummaryPrincipal);
+    renderTables(window.ultimoSummaryPrincipal);
+    renderDaily(window.ultimoSummaryPrincipal, window.ultimoCompareSummary);
+    return;
+  }
+
+  const diasOrdenados = [...diasSeleccionados].sort();
+  document.getElementById('nombreDiasFiltrados').textContent = diasOrdenados.map((f) => formatEtiquetaFecha(f)).join(', ');
+  badge.style.display = 'block';
+
+  const diasData = (window.ultimosDiasCrudos || [])
+    .filter((d) => diasSeleccionados.has(d.fecha))
+    .map((d) => d.data);
+
+  if (diasData.length === 0) {
+    document.getElementById('nombreDiasFiltrados').textContent += ' (sin detalle guardado para sumar -- solo disponible para días guardados)';
+    return;
+  }
+
+  const combinado = mergeResumenes(diasData);
+  renderCategory(combinado);
+  renderHourly(combinado);
+  renderTables(combinado);
+  renderDaily(window.ultimoSummaryPrincipal, window.ultimoCompareSummary); // refresca el resaltado de puntos elegidos
+}
+
+document.getElementById('btnQuitarFiltroDias').addEventListener('click', () => {
+  diasSeleccionados.clear();
+  actualizarVistaPorDiasSeleccionados();
+});
+
+let categoriaSeleccionada = null;
+
+function renderCategory(s) {
+  window.ultimoSummaryPrincipal = s;
+  const top = s.categories.slice(0, 8);
+  if (chartCategory) chartCategory.destroy();
+  chartCategory = new Chart(document.getElementById('chartCategory'), {
+    type: 'doughnut',
+    data: {
+      labels: top.map((c) => c.name),
+      datasets: [{
+        data: top.map((c) => c.revenue),
+        backgroundColor: top.map((c, i) => (categoriaSeleccionada && categoriaSeleccionada !== c.name) ? PALETTE[i] + '40' : PALETTE[i]),
+        borderColor: '#fff', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmt(ctx.raw) + ' (' + top[ctx.dataIndex].pct.toFixed(1) + '%)' } },
+      },
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const nombre = top[elements[0].index].name;
+        aplicarFiltroCategoria(categoriaSeleccionada === nombre ? null : nombre);
+      },
+    },
+  });
+
+  // Leyenda de colores al lado/debajo de la dona, con su % -- para saber qué
+  // color es cada categoría y su peso, sin tener que adivinar ni pasar el mouse.
+  document.getElementById('leyendaCategorias').innerHTML = top.map((c, i) => `
+    <span style="display:flex; align-items:center; gap:5px; cursor:pointer;" data-nombre="${c.name}">
+      <span style="width:11px; height:11px; border-radius:3px; background:${PALETTE[i]}; display:inline-block; flex-shrink:0;"></span>
+      <span style="color:${(categoriaSeleccionada && categoriaSeleccionada !== c.name) ? '#9ca3af' : '#14213d'};">${c.name} <b>${c.pct.toFixed(1)}%</b></span>
+    </span>
+  `).join('');
+  document.getElementById('leyendaCategorias').querySelectorAll('[data-nombre]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const nombre = el.getAttribute('data-nombre');
+      aplicarFiltroCategoria(categoriaSeleccionada === nombre ? null : nombre);
+    });
+  });
+}
+
+function aplicarFiltroCategoria(nombre) {
+  categoriaSeleccionada = nombre;
+  const badge = document.getElementById('badgeFiltroCategoria');
+  if (nombre) {
+    badge.style.display = 'block';
+    document.getElementById('nombreCategoriaFiltrada').textContent = nombre;
+  } else {
+    badge.style.display = 'none';
+  }
+  renderCategory(window.ultimoSummaryPrincipal);
+  renderDailyConFiltro(nombre);
+  renderHourlyConFiltro(nombre);
+  renderTablaProductosConFiltro(nombre);
+}
+
+document.getElementById('btnQuitarFiltroCategoria').addEventListener('click', () => aplicarFiltroCategoria(null));
+
+// Tocar fuera de las 4 tarjetas filtrables también quita el filtro.
+document.addEventListener('click', (evt) => {
+  if (!categoriaSeleccionada) return;
+  const zona = document.getElementById('zonaFiltrableCategoria');
+  const badge = document.getElementById('badgeFiltroCategoria');
+  if (!zona.contains(evt.target) && !badge.contains(evt.target)) {
+    aplicarFiltroCategoria(null);
   }
 });
+
+function renderDailyConFiltro(nombre) {
+  const s = window.ultimoSummaryPrincipal;
+  const c = window.ultimoCompareSummary;
+  if (!nombre) { renderDaily(s, c); return; }
+
+  // El detalle por categoría día a día solo se puede armar con precisión
+  // usando los días GUARDADOS (con su detalle de productos por día).
+  const diasOrdenados = [...(window.ultimosDiasCrudos || [])].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const labels = diasOrdenados.map((d) => formatEtiquetaFecha(d.fecha));
+  const data = diasOrdenados.map((d) => (d.data.products || []).filter((p) => p.category === nombre).reduce((acc, p) => acc + p.revenue, 0));
+
+  if (chartDaily) chartDaily.destroy();
+  chartDaily = new Chart(document.getElementById('chartDaily'), {
+    type: 'line',
+    data: { labels, datasets: [{ label: nombre, data, borderColor: C2, backgroundColor: C2 + '22', fill: true, tension: 0.25, pointRadius: 3 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => fmt(ctx.raw) } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: MUTED, font: { size: 10 }, maxRotation: 90, minRotation: 90 } },
+        y: { grid: { color: GRID }, ticks: { color: MUTED, callback: (v) => fmtCompact(v) } },
+      },
+    },
+  });
+}
+
+function renderHourlyConFiltro(nombre) {
+  const s = window.ultimoSummaryPrincipal;
+  if (!nombre) { renderHourly(s); return; }
+
+  const productosDeCategoria = (s.products || []).filter((p) => p.category === nombre).map((p) => p.name);
+  const porHora = new Map();
+  for (const nombreProd of productosDeCategoria) {
+    const ph = (s.productsByHour && s.productsByHour[nombreProd]) || {};
+    for (const hora of Object.keys(ph)) {
+      porHora.set(hora, (porHora.get(hora) || 0) + ph[hora].revenue);
+    }
+  }
+  const horas = [...porHora.keys()].sort();
+  const data = horas.map((h) => porHora.get(h));
+
+  if (chartHourly) chartHourly.destroy();
+  chartHourly = new Chart(document.getElementById('chartHourly'), {
+    type: 'bar',
+    data: { labels: horas.map((h) => h + ':00'), datasets: [{ data, backgroundColor: C2, borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => fmt(ctx.raw) } } },
+      scales: { x: { grid: { display: false }, ticks: { color: MUTED, font: { size: 11 } } }, y: { grid: { color: GRID }, ticks: { color: MUTED, callback: (v) => fmtCompact(v) } } },
+    },
+  });
+}
+
+function renderHourly(s) {
+  if (chartHourly) chartHourly.destroy();
+  chartHourly = new Chart(document.getElementById('chartHourly'), {
+    type: 'bar',
+    data: { labels: s.hourly.map(h=>h.hour+':00'), datasets:[{ data: s.hourly.map(h=>h.revenue), backgroundColor: C1, borderRadius:4 }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>fmt(ctx.raw)}} },
+      scales:{ x:{grid:{display:false},ticks:{color:MUTED,font:{size:11}}}, y:{grid:{color:GRID},ticks:{color:MUTED,callback:v=>fmtCompact(v)}} }
+    }
+  });
+}
+
+function renderTablaProductosConFiltro(nombre) {
+  const s = window.ultimoSummaryPrincipal;
+  const lista = nombre ? s.products.filter((p) => p.category === nombre) : s.products;
+  document.getElementById('tableProducts').querySelector('tbody').innerHTML =
+    lista.slice(0, 10).map((p) => `<tr><td>${p.name}</td><td>${p.category}</td><td class="num">${p.quantity}</td><td class="num">${fmt(p.revenue)}</td></tr>`).join('');
+}
+
+function renderTables(s) {
+  renderTablaProductosConFiltro(null);
+  document.getElementById('tableCategories').querySelector('tbody').innerHTML =
+    s.categories.map(c => `<tr><td>${c.name}</td><td class="num">${c.quantity}</td><td class="num">${fmt(c.revenue)}</td><td class="num">${c.pct.toFixed(1)}%</td></tr>`).join('');
+}
+
+// ===== Análisis interactivo: tocar un producto filtra el resto de los gráficos =====
+let productoSeleccionado = null;
+let chartTopProductosInteractivo, chartProductoPorHora, chartProductoPorDia;
+
+function renderAnalisisInteractivo(summary, diasCrudos) {
+  window.ultimoSummaryInteractivo = summary;
+  window.ultimosDiasCrudos = diasCrudos || [];
+  productoSeleccionado = null;
+  dibujarTopProductosInteractivo(summary);
+  dibujarDetalleProducto(null);
+}
+
+function dibujarTopProductosInteractivo(summary) {
+  const top = (summary.products || []).slice(0, 15);
+  if (chartTopProductosInteractivo) chartTopProductosInteractivo.destroy();
+  chartTopProductosInteractivo = new Chart(document.getElementById('chartTopProductosInteractivo'), {
+    type: 'bar',
+    data: {
+      labels: top.map((p) => p.name),
+      datasets: [{ data: top.map((p) => p.revenue), backgroundColor: top.map((p) => p.name === productoSeleccionado ? C2 : C1), borderRadius: 4 }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => fmt(ctx.raw) } } },
+      scales: {
+        x: { grid: { color: GRID }, ticks: { color: MUTED, callback: (v) => fmtCompact(v) } },
+        y: { grid: { display: false }, ticks: { color: MUTED, font: { size: 10 } } },
+      },
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const nombre = top[elements[0].index].name;
+        productoSeleccionado = (productoSeleccionado === nombre) ? null : nombre;
+        dibujarTopProductosInteractivo(window.ultimoSummaryInteractivo);
+        dibujarDetalleProducto(productoSeleccionado);
+      },
+    },
+  });
+}
+
+const HORAS_RANGO = Array.from({ length: 16 }, (_, i) => String(i + 7).padStart(2, '0')); // 07..22
+
+function dibujarDetalleProducto(nombre) {
+  const summary = window.ultimoSummaryInteractivo;
+  const diasCrudos = window.ultimosDiasCrudos || [];
+  const btnQuitar = document.getElementById('btnQuitarFiltroProducto');
+  const wrapDia = document.getElementById('wrapProductoPorDia');
+  const tituloDia = document.getElementById('tituloProductoPorDia');
+  const tituloHora = document.getElementById('tituloDetalleProducto');
+
+  if (!nombre) {
+    tituloHora.textContent = 'Venta por hora (todos los productos)';
+    btnQuitar.style.display = 'none';
+    wrapDia.style.display = 'none';
+    tituloDia.style.display = 'none';
+    const mapa = new Map((summary.hourly || []).map((h) => [h.hour, h.revenue]));
+    dibujarBarraHora(HORAS_RANGO.map((h) => mapa.get(h) || 0), C1);
+    return;
+  }
+
+  tituloHora.textContent = `Venta por hora — ${nombre}`;
+  btnQuitar.style.display = 'inline-block';
+  wrapDia.style.display = 'block';
+  tituloDia.style.display = 'block';
+  tituloDia.textContent = `Venta por día — ${nombre}`;
+
+  const porHora = (summary.productsByHour && summary.productsByHour[nombre]) || {};
+  dibujarBarraHora(HORAS_RANGO.map((h) => (porHora[h] ? porHora[h].revenue : 0)), C2);
+
+  const diasOrdenados = [...diasCrudos].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const labelsDia = diasOrdenados.map((d) => formatEtiquetaFecha(d.fecha));
+  const dataDia = diasOrdenados.map((d) => {
+    const prod = (d.data.products || []).find((p) => p.name === nombre);
+    return prod ? prod.revenue : 0;
+  });
+
+  if (chartProductoPorDia) chartProductoPorDia.destroy();
+  chartProductoPorDia = new Chart(document.getElementById('chartProductoPorDia'), {
+    type: 'line',
+    data: { labels: labelsDia, datasets: [{ data: dataDia, borderColor: C1, backgroundColor: C1 + '22', fill: true, tension: 0.25, pointRadius: 3 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => fmt(ctx.raw) } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: MUTED, font: { size: 9 }, maxRotation: 90, minRotation: 90, autoSkip: true } },
+        y: { grid: { color: GRID }, ticks: { color: MUTED, callback: (v) => fmtCompact(v) } },
+      },
+    },
+  });
+}
+
+function dibujarBarraHora(data, color) {
+  if (chartProductoPorHora) chartProductoPorHora.destroy();
+  chartProductoPorHora = new Chart(document.getElementById('chartProductoPorHora'), {
+    type: 'bar',
+    data: { labels: HORAS_RANGO.map((h) => h + ':00'), datasets: [{ data, backgroundColor: color, borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => fmt(ctx.raw) } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: MUTED, font: { size: 9 } } },
+        y: { grid: { color: GRID }, ticks: { color: MUTED, callback: (v) => fmtCompact(v) } },
+      },
+    },
+  });
+}
+
+document.getElementById('btnQuitarFiltroProducto').addEventListener('click', () => {
+  productoSeleccionado = null;
+  dibujarTopProductosInteractivo(window.ultimoSummaryInteractivo);
+  dibujarDetalleProducto(null);
+});
+
+// ===== Calendario visual: días con venta marcados, días sin venta en gris =====
+let calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let calSelectedISO = null;
+const calCache = {}; // "YYYY-MM" -> Set de fechas ISO con venta > 0
+
+const MES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+async function getDiasConVentaDelMes(year, month) {
+  const key = `${year}-${pad(month+1)}`;
+  if (calCache[key]) return calCache[key];
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  // OJO: esto consulta el ALMACÉN GUARDADO (dias-guardados), no a Toteat en
+  // vivo -- así el calendario es rápido y refleja justo los días que ya
+  // subiste con la planilla o "Buscar y guardar", que es lo que de verdad
+  // se puede usar para comparar.
+  const ini = toISODate(first);
+  const end = toISODate(last);
+  try {
+    const res = await fetch(`${STORE_URL}?ini=${ini}&end=${end}`);
+    const data = await res.json();
+    const set = new Set();
+    if (data.ok && data.dias) {
+      data.dias.forEach((d) => { if (d.data && d.data.totalRevenue > 0) set.add(d.fecha); });
+    }
+    calCache[key] = set;
+    return set;
+  } catch (e) {
+    return new Set();
+  }
+}
+
+async function renderCalendar() {
+  const cal = document.getElementById('calendar');
+  const year = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+  const titulo = `${MES_LARGO[month]} ${year}`;
+
+  cal.innerHTML = `
+    <div class="calHeader">
+      <button id="calPrev" type="button">‹</button>
+      <span class="calTitle">${titulo}</span>
+      <button id="calNext" type="button">›</button>
+    </div>
+    <div class="calGrid">
+      ${['L','M','M','J','V','S','D'].map(d => `<div class="calDow">${d}</div>`).join('')}
+    </div>
+    <div class="calLoading">Cargando días con venta…</div>
+  `;
+  document.getElementById('calPrev').onclick = () => { calMonth = new Date(year, month - 1, 1); renderCalendar(); };
+  document.getElementById('calNext').onclick = () => { calMonth = new Date(year, month + 1, 1); renderCalendar(); };
+
+  const diasConVenta = await getDiasConVentaDelMes(year, month);
+
+  const first = new Date(year, month, 1);
+  let startOffset = first.getDay() - 1; // lunes=0
+  if (startOffset < 0) startOffset = 6;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const hoy = new Date();
+  const hoyISO = toISODate(hoy);
+
+  let celdas = '';
+  for (let i = 0; i < startOffset; i++) {
+    celdas += '<div class="calDay empty"></div>';
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(year, month, day);
+    const iso = toISODate(d);
+    const futuro = iso > hoyISO;
+    const tieneVenta = diasConVenta.has(iso);
+    const clases = ['calDay', tieneVenta ? 'hasData' : 'noData'];
+    if (iso === calSelectedISO) clases.push('selected');
+    celdas += `<div class="${clases.join(' ')}" data-iso="${iso}" data-futuro="${futuro}">${day}</div>`;
+  }
+
+  cal.innerHTML = `
+    <div class="calHeader">
+      <button id="calPrev" type="button">‹</button>
+      <span class="calTitle">${titulo}</span>
+      <button id="calNext" type="button">›</button>
+    </div>
+    <div class="calGrid">
+      ${['L','M','M','J','V','S','D'].map(d => `<div class="calDow">${d}</div>`).join('')}
+      ${celdas}
+    </div>
+  `;
+  document.getElementById('calPrev').onclick = () => { calMonth = new Date(year, month - 1, 1); renderCalendar(); };
+  document.getElementById('calNext').onclick = () => { calMonth = new Date(year, month + 1, 1); renderCalendar(); };
+
+  cal.querySelectorAll('.calDay.hasData').forEach((el) => {
+    el.addEventListener('click', () => {
+      const iso = el.getAttribute('data-iso');
+      calSelectedISO = iso;
+      document.getElementById('fechaIni').value = iso;
+      document.getElementById('fechaEnd').value = iso;
+      cal.querySelectorAll('.calDay').forEach((x) => x.classList.remove('selected'));
+      el.classList.add('selected');
+      cargarDatos(false);
+    });
+  });
+}
+
+document.getElementById('periodo').addEventListener('change', (e) => {
+  const esCustom = e.target.value === 'custom';
+  document.getElementById('customRange').style.display = esCustom ? 'inline' : 'none';
+  document.getElementById('calendarWrap').style.display = esCustom ? 'block' : 'none';
+  if (esCustom) {
+    const hoy = new Date();
+    calMonth = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    renderCalendar();
+  } else {
+    cargarDatos(false); // el rango personalizado carga solo cuando se elige el día en el calendario
+  }
+});
+document.getElementById('compararToggle').addEventListener('change', () => cargarDatos(false));
+document.getElementById('btnActualizarToteat').addEventListener('click', async () => {
+  const btn = document.getElementById('btnActualizarToteat');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Consultando Toteat…';
+  document.getElementById('errorBox').innerHTML = '';
+
+  const resultado = await refrescarHoyEnVivo();
+
+  if (resultado.ok) {
+    const numeroTxt = resultado.ultimaBoletaNumero ? ` (N° ${resultado.ultimaBoletaNumero})` : '';
+    btn.textContent = `✅ Hoy actualizado: ${resultado.ultimaBoletaHora || ''}${numeroTxt}`;
+  } else {
+    btn.textContent = '❌ Falló, ver detalle abajo';
+    document.getElementById('errorBox').innerHTML = `<div class="error">❌ "Actualizar con Toteat" no pudo traer los datos de hoy: ${resultado.error}. Prueba abriendo directo <a href="${FUNCTION_URL}?ini=${toYYYYMMDD(new Date())}&end=${toYYYYMMDD(new Date())}" target="_blank">este link</a> para ver el error real de Toteat.</div>`;
+  }
+
+  cargarDatos(true);
+  cargarPuntoEquilibrio(true);
+  document.getElementById('btnCompararHoraExacta').click();
+
+  setTimeout(() => { btn.textContent = textoOriginal; btn.disabled = false; }, 4000);
+});
+
+// "Actualizar con Toteat" siempre refresca HOY puntualmente (aunque ya
+// estuviera guardado) -- es el único día que sigue cambiando en el
+// transcurso de la jornada, así la "última boleta medida" queda al día.
+// Devuelve {ok, error} o {ok:true, ultimaBoletaHora, ultimaBoletaNumero} para
+// poder mostrarle al usuario si de verdad funcionó o por qué falló.
+async function refrescarHoyEnVivo() {
+  const hoyYYYYMMDD = toYYYYMMDD(new Date());
+  try {
+    const res = await fetch(`${FUNCTION_URL}?ini=${hoyYYYYMMDD}&end=${hoyYYYYMMDD}`);
+    let json;
+    try {
+      json = await res.json();
+    } catch (e) {
+      return { ok: false, error: `respuesta no es JSON válido (HTTP ${res.status})` };
+    }
+    if (!res.ok || !json.ok) {
+      return { ok: false, error: json.error || `HTTP ${res.status}` };
+    }
+    await guardarDiaEnStore(toISODate(new Date()), json.summary);
+    return {
+      ok: true,
+      ultimaBoletaHora: json.summary.ultimaBoletaHora,
+      ultimaBoletaNumero: json.summary.ultimaBoletaNumero,
+    };
+  } catch (e) {
+    return { ok: false, error: e.message || 'error de red' };
+  }
+}
+document.getElementById('btnAuto').addEventListener('click', (e) => {
+  if (autoTimer) {
+    clearInterval(autoTimer); autoTimer = null;
+    e.target.textContent = 'Auto-refresco: OFF';
+  } else {
+    // El auto-refresco sí sincroniza en vivo con Toteat (para eso sirve:
+    // ver ventas nuevas entrando durante el día) -- pero solo corre si el
+    // usuario lo prende a propósito, nunca automático al cargar la página.
+    autoTimer = setInterval(() => { cargarDatos(true); cargarPuntoEquilibrio(true); }, 2*60*1000);
+    e.target.textContent = 'Auto-refresco: ON (cada 2 min, en vivo)';
+  }
+});
+
+// ===== Punto de equilibrio mensual (prorrateado si el mes es parcial) =====
+// La meta y la fecha de apertura se guardan en el servidor (compartidas
+// entre todos los que abran el dashboard, no solo en este navegador).
+// localStorage se usa solo como caché rápida para no mostrar el valor por
+// defecto un instante mientras carga.
+async function cargarConfigMeta() {
+  const metaCache = localStorage.getItem('metaMensual');
+  const aperturaCache = localStorage.getItem('fechaApertura');
+  document.getElementById('metaMensual').value = formatMiles(metaCache || '50000000');
+  document.getElementById('fechaApertura').value = aperturaCache || '';
+  actualizarBadgeApertura(aperturaCache || '');
+
+  // Reintenta un par de veces -- en celular con conexión más lenta, un solo
+  // intento fallido dejaba el formulario con los valores por defecto en vez
+  // de la meta/apertura real guardada en el servidor.
+  const intentos = 3;
+  for (let intento = 1; intento <= intentos; intento++) {
+    try {
+      const res = await fetch(`${STORE_URL}?action=getConfig`);
+      const json = await res.json();
+      if (json.ok && json.config) {
+        const meta = json.config.metaMensual || '50000000';
+        const apertura = json.config.fechaApertura || '';
+        document.getElementById('metaMensual').value = formatMiles(meta);
+        document.getElementById('fechaApertura').value = apertura;
+        localStorage.setItem('metaMensual', meta);
+        localStorage.setItem('fechaApertura', apertura);
+        actualizarBadgeApertura(apertura);
+      } else {
+        actualizarBadgeApertura('');
+      }
+      return; // éxito (con o sin config guardada aún) -- no reintentar más
+    } catch (e) {
+      if (intento < intentos) {
+        await new Promise((r) => setTimeout(r, 800 * intento));
+      }
+      // si se agotan los intentos, se queda con lo que había en caché local
+    }
+  }
+}
+
+function actualizarBadgeApertura(aperturaISO) {
+  const el = document.getElementById('aperturaBadge');
+  if (!aperturaISO) {
+    el.textContent = '⚠️ Fecha de apertura no configurada todavía (bájala en "Punto de equilibrio" y toca Guardar).';
+    el.style.background = '#fef2f2';
+    el.style.color = '#991b1b';
+    return;
+  }
+  const d = new Date(aperturaISO + 'T00:00:00');
+  const texto = `📅 Local abierto desde el ${DOW_CORTO[d.getDay()]} ${d.getDate()} de ${MES_LARGO[d.getMonth()]} de ${d.getFullYear()}`;
+  el.textContent = texto;
+  el.style.background = '#eaf2fc';
+  el.style.color = '#14213d';
+}
+
+function formatMiles(numStr) {
+  const soloDigitos = String(numStr).replace(/\D/g, '');
+  if (!soloDigitos) return '';
+  return Number(soloDigitos).toLocaleString('es-CL');
+}
+
+document.getElementById('metaMensual').addEventListener('input', (e) => {
+  const cursorAlFinal = e.target.selectionStart === e.target.value.length;
+  const soloDigitos = e.target.value.replace(/\D/g, '');
+  e.target.value = formatMiles(soloDigitos);
+  if (cursorAlFinal) {
+    e.target.setSelectionRange(e.target.value.length, e.target.value.length);
+  }
+});
+
+document.getElementById('btnGuardarMeta').addEventListener('click', async () => {
+  const metaDigitos = document.getElementById('metaMensual').value.replace(/\D/g, '') || '50000000';
+  const apertura = document.getElementById('fechaApertura').value || '';
+  const config = { metaMensual: metaDigitos, fechaApertura: apertura };
+
+  localStorage.setItem('metaMensual', metaDigitos);
+  localStorage.setItem('fechaApertura', apertura);
+  document.getElementById('metaMensual').value = formatMiles(metaDigitos);
+  actualizarBadgeApertura(apertura);
+
+  const btn = document.getElementById('btnGuardarMeta');
+  const textoOriginal = btn.textContent;
+  btn.textContent = 'Guardando…';
+  try {
+    const res = await fetch(STORE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config }),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error('respuesta no ok');
+
+    // Verificación: releemos del servidor para confirmar que de verdad quedó
+    // grabado (no solo que la petición se envió), antes de dar por bueno.
+    const verif = await fetch(`${STORE_URL}?action=getConfig`);
+    const verifJson = await verif.json();
+    const quedoBien = verifJson.ok && verifJson.config && verifJson.config.fechaApertura === apertura && verifJson.config.metaMensual === metaDigitos;
+    btn.textContent = quedoBien ? '✅ Guardado y verificado' : '⚠️ Guardado, pero no se pudo verificar';
+  } catch (e) {
+    btn.textContent = '❌ Error al guardar';
+  }
+  setTimeout(() => { btn.textContent = textoOriginal; }, 2200);
+
+  cargarPuntoEquilibrio();
+});
+
+async function cargarPuntoEquilibrio(modoLive) {
+  modoLive = modoLive === true;
+  const metaMensual = Number(localStorage.getItem('metaMensual') || 50000000);
+  const aperturaStr = localStorage.getItem('fechaApertura') || '';
+
+  const hoy = new Date();
+  const year = hoy.getFullYear();
+  const month = hoy.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  let startDay = 1;
+  if (aperturaStr) {
+    const apertura = new Date(aperturaStr + 'T00:00:00');
+    if (apertura.getFullYear() === year && apertura.getMonth() === month) {
+      startDay = apertura.getDate();
+    } else if (apertura > hoy) {
+      // apertura futura, no aplica prorrateo todavía
+      startDay = 1;
+    }
+  }
+
+  const diasOperativosMes = daysInMonth - startDay + 1;
+  const metaProrateada = Math.round(metaMensual * diasOperativosMes / daysInMonth);
+  const diasTranscurridos = Math.max(1, hoy.getDate() - startDay + 1);
+
+  const inicioConsulta = new Date(year, month, startDay);
+
+  document.getElementById('beSubtitle').textContent = modoLive ? 'Sincronizando con Toteat…' : 'Cargando datos guardados…';
+  try {
+    const summary = await obtenerResumenConCache(toYYYYMMDD(inicioConsulta), toYYYYMMDD(hoy), modoLive);
+    const ventaAcumulada = summary.totalRevenue;
+
+    const pctAvance = metaProrateada > 0 ? (ventaAcumulada / metaProrateada) * 100 : 0;
+    const promedioDiarioActual = ventaAcumulada / diasTranscurridos;
+    const diasRestantes = Math.max(0, diasOperativosMes - diasTranscurridos);
+    const proyeccionCierre = diasRestantes > 0 ? promedioDiarioActual * diasOperativosMes : ventaAcumulada;
+    const pctProyeccion = metaProrateada > 0 ? (proyeccionCierre / metaProrateada) * 100 : 0;
+    const metaRestante = Math.max(0, metaProrateada - ventaAcumulada);
+    const promedioNecesario = diasRestantes > 0 ? metaRestante / diasRestantes : 0;
+
+    const notaProrrateo = startDay > 1
+      ? `Mes parcial: el local operó ${diasOperativosMes} de ${daysInMonth} días de ${MES_LARGO[month]} (desde el ${startDay}), por eso la meta se prorrateó proporcionalmente.`
+      : `Meta completa de ${MES_LARGO[month]} (mes de ${daysInMonth} días).`;
+    const notaSinDatos = summary.diasSinDatos > 0
+      ? ` ⚠️ ${summary.diasSinDatos} día(s) del mes todavía no están guardados -- toca "Actualizar con Toteat" para completarlos.`
+      : '';
+    document.getElementById('beSubtitle').textContent = notaProrrateo + notaSinDatos;
+
+    const claseBarra = pctAvance >= (diasTranscurridos/diasOperativosMes*100) ? 'ok' : '';
+
+    document.getElementById('beGrid').innerHTML = `
+      <div class="beItem"><p class="label">Meta del mes ${startDay>1?'(prorrateada)':''}</p><p class="value">${fmt(metaProrateada)}</p></div>
+      <div class="beItem"><p class="label">Venta acumulada (${diasTranscurridos} días)</p><p class="value">${fmt(ventaAcumulada)}</p></div>
+      <div class="beItem"><p class="label">% de la meta alcanzado</p><p class="value">${pctAvance.toFixed(1)}%</p></div>
+      <div class="beItem"><p class="label">Proyección de cierre (ritmo actual)</p><p class="value" style="color:${pctProyeccion>=100?'#16a34a':'#dc2626'}">${fmt(proyeccionCierre)} (${pctProyeccion.toFixed(0)}%)</p></div>
+      <div class="beItem"><p class="label">Promedio diario actual</p><p class="value">${fmt(promedioDiarioActual)}</p></div>
+      <div class="beItem"><p class="label">Necesitas vender ${diasRestantes>0? '/día restante':''}</p><p class="value">${diasRestantes>0? fmt(promedioNecesario) : '¡Meta cumplida!'}</p></div>
+      <div class="beBarWrap">
+        <div class="beBarTrack"><div class="beBarFill ${claseBarra}" style="width:${Math.min(100,pctAvance)}%"></div></div>
+        <p class="beNote">${diasRestantes} días restantes en el mes · si mantienes el ritmo actual, ${pctProyeccion>=100?'superas':'no alcanzas'} la meta.</p>
+      </div>
+    `;
+
+    renderTendenciaEquilibrio({
+      year, month, startDay, daysInMonth, diasOperativosMes, diasTranscurridos,
+      metaProrateada, promedioDiarioActual,
+      daily: summary.daily,
+    });
+  } catch (e) {
+    document.getElementById('beSubtitle').textContent = 'No se pudo calcular (revisa la conexión con Toteat).';
+    document.getElementById('beGrid').innerHTML = '';
+    document.getElementById('beChartWrap').style.display = 'none';
+  }
+}
+
+let chartBreakevenTrend;
+function renderTendenciaEquilibrio(p) {
+  const { year, month, startDay, daysInMonth, diasOperativosMes, diasTranscurridos, metaProrateada, promedioDiarioActual, daily } = p;
+
+  // Mapa fecha ISO -> venta de ese día (0 si no hay registro, ej. local cerrado).
+  const porFecha = new Map(daily.map((d) => [d.date, d.revenue]));
+  const hoy = new Date();
+  const hoyISO = toISODate(hoy);
+
+  const labels = [];
+  const fechasISO = [];      // fecha ISO real de cada barra -- para el filtro interactivo
+  const serieReal = [];       // venta acumulada real, null después de hoy
+  const serieMetaLineal = []; // ritmo ideal para llegar exacto a la meta
+  const serieProyeccion = []; // proyección desde hoy al ritmo actual, null antes de hoy
+  const serieDiaria = [];     // venta de ESE día puntual (no acumulada) -- para mostrar en el tooltip
+
+  let acumulado = 0;
+  for (let i = 1; i <= diasOperativosMes; i++) {
+    const diaDelMes = startDay + i - 1;
+    const d = new Date(year, month, diaDelMes);
+    const iso = toISODate(d);
+    labels.push(formatEtiquetaFecha(iso));
+    fechasISO.push(iso);
+
+    serieMetaLineal.push(Math.round(metaProrateada * i / diasOperativosMes));
+
+    if (iso <= hoyISO) {
+      const ventaDelDia = porFecha.get(iso) || 0;
+      acumulado += ventaDelDia;
+      serieReal.push(Math.round(acumulado));
+      serieDiaria.push(Math.round(ventaDelDia));
+      serieProyeccion.push(iso === hoyISO ? Math.round(acumulado) : null);
+    } else {
+      serieReal.push(null);
+      serieDiaria.push(null);
+      const diasDesdeHoy = i - diasTranscurridos;
+      serieProyeccion.push(Math.round(acumulado + promedioDiarioActual * diasDesdeHoy));
+    }
+  }
+
+  document.getElementById('beChartWrap').style.display = 'block';
+  if (chartBreakevenTrend) chartBreakevenTrend.destroy();
+  chartBreakevenTrend = new Chart(document.getElementById('chartBreakevenTrend'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Venta acumulada real', data: serieReal, borderColor: C1, backgroundColor: C1+'22', fill:true, tension:0.2, pointRadius:3, pointHoverRadius:5, spanGaps:false },
+        { label: 'Ritmo ideal para la meta', data: serieMetaLineal, borderColor: '#9ca3af', borderDash:[4,4], pointRadius:0, fill:false, tension:0 },
+        { label: 'Proyección (ritmo actual)', data: serieProyeccion, borderColor: '#eb6834', borderDash:[6,3], pointRadius:0, fill:false, tension:0.2, spanGaps:false },
+      ],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:true, position:'top', labels:{boxWidth:10,font:{size:11}} },
+        tooltip:{
+          callbacks:{
+            label: ctx => ctx.dataset.label+': '+fmt(ctx.raw),
+            afterLabel: ctx => {
+              if (ctx.datasetIndex === 0) {
+                const venta = serieDiaria[ctx.dataIndex];
+                if (venta != null) return `Venta de ese día: ${fmt(venta)}`;
+              }
+              return null;
+            },
+          },
+        },
+      },
+      scales:{
+        x:{ grid:{display:false}, ticks:{ color: MUTED, font:{size:10}, maxRotation:90, minRotation:90, autoSkip:true } },
+        y:{ grid:{color:GRID}, ticks:{ color: MUTED, callback: v => fmtCompact(v) } },
+      },
+    },
+  });
+
+  renderVentaPorDia(labels, serieDiaria, fechasISO);
+}
+
+let chartVentaPorDia;
+function renderVentaPorDia(labels, serieDiaria, fechasISO) {
+  window.ultimoVentaPorDiaArgs = { labels, serieDiaria, fechasISO }; // para poder re-pintar solo esto al cambiar la selección
+  document.getElementById('beChartDiarioWrap').style.display = 'block';
+  if (chartVentaPorDia) chartVentaPorDia.destroy();
+  const colorBarra = (idx) => diasSeleccionados.has(fechasISO[idx]) ? C2 : C1;
+  chartVentaPorDia = new Chart(document.getElementById('chartVentaPorDia'), {
+    type: 'bar',
+    plugins: [ChartDataLabels],
+    data: {
+      labels,
+      datasets: [
+        { label: 'Venta del día', data: serieDiaria, backgroundColor: serieDiaria.map((v, idx) => colorBarra(idx)), borderRadius: 4 },
+      ],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label: ctx => fmt(ctx.raw) } },
+        datalabels: {
+          display: (ctx) => ctx.dataset.data[ctx.dataIndex] != null,
+          anchor: 'end',
+          align: 'top',
+          color: '#14213d',
+          font: { size: 10, weight: '600' },
+          formatter: (v) => v == null ? '' : fmtCompact(v),
+        },
+      },
+      layout: { padding: { top: 18 } },
+      scales:{
+        x:{ grid:{display:false}, ticks:{ color: MUTED, font:{size:10}, maxRotation:90, minRotation:90, autoSkip:true } },
+        y:{ grid:{color:GRID}, ticks:{ color: MUTED, callback: v => fmtCompact(v) } },
+      },
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const idx = elements[0].index;
+        const fecha = fechasISO[idx];
+        if (serieDiaria[idx] == null || !fecha) return; // barra vacía (día futuro, sin datos)
+        if (diasSeleccionados.has(fecha)) diasSeleccionados.delete(fecha);
+        else diasSeleccionados.add(fecha);
+        actualizarVistaPorDiasSeleccionados();
+      },
+    },
+  });
+}
+
+cargarConfigMeta().then(cargarPuntoEquilibrio);
+
+cargarDatos();
+
+// ===== Comparar hoy vs la semana pasada (siempre automático) + un 3er día opcional =====
+// El recuadro rojo "+ Comparar con otro día" despliega el calendario en el
+// mismo lugar donde está; al elegir un día, se agrega como 3ra columna.
+let calMonthComparar = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let calendarioExtraAbierto = false;
+
+function toggleCalendarioExtra() {
+  calendarioExtraAbierto = !calendarioExtraAbierto;
+  document.getElementById('btnCompararHoraExacta').click();
+}
+
+async function renderCalendarioExtraInline() {
+  const cont = document.createElement('div');
+  cont.className = 'calendar';
+  cont.style.marginTop = '8px';
+  const year = calMonthComparar.getFullYear();
+  const month = calMonthComparar.getMonth();
+  const titulo = `${MES_LARGO[month]} ${year}`;
+  const diasConVenta = await getDiasConVentaDelMes(year, month);
+  const actual = document.getElementById('fechaComparar').value;
+
+  const first = new Date(year, month, 1);
+  let startOffset = first.getDay() - 1;
+  if (startOffset < 0) startOffset = 6;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  let celdas = '';
+  for (let i = 0; i < startOffset; i++) celdas += '<div class="calDay empty"></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = toISODate(new Date(year, month, day));
+    const clases = ['calDay', diasConVenta.has(iso) ? 'hasData' : 'noData'];
+    if (iso === actual) clases.push('selected');
+    celdas += `<div class="${clases.join(' ')}" data-iso="${iso}">${day}</div>`;
+  }
+
+  cont.innerHTML = `
+    <div class="calHeader"><button id="calComPrev" type="button">‹</button><span class="calTitle">${titulo}</span><button id="calComNext" type="button">›</button></div>
+    <div class="calGrid">${['L','M','M','J','V','S','D'].map((d) => `<div class="calDow">${d}</div>`).join('')}${celdas}</div>
+  `;
+  cont.querySelector('#calComPrev').onclick = (e) => { e.stopPropagation(); calMonthComparar = new Date(year, month - 1, 1); document.getElementById('btnCompararHoraExacta').click(); };
+  cont.querySelector('#calComNext').onclick = (e) => { e.stopPropagation(); calMonthComparar = new Date(year, month + 1, 1); document.getElementById('btnCompararHoraExacta').click(); };
+  cont.querySelectorAll('.calDay.hasData').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById('fechaComparar').value = el.getAttribute('data-iso');
+      calendarioExtraAbierto = false;
+      document.getElementById('btnCompararHoraExacta').click();
+    });
+  });
+  return cont;
+}
+
+document.getElementById('btnCompararHoraExacta').addEventListener('click', async () => {
+  const box = document.getElementById('comparacionHoraBox');
+  const fechaExtra = document.getElementById('fechaComparar').value; // opcional, 3er día
+
+  const hoy = new Date();
+  const hoyISO = toISODate(hoy);
+
+  const haceUnaSemana = new Date(hoy);
+  haceUnaSemana.setDate(haceUnaSemana.getDate() - 7);
+  const haceUnaSemanaISO = toISODate(haceUnaSemana);
+
+  const incluirExtra = !!fechaExtra && fechaExtra !== hoyISO && fechaExtra !== haceUnaSemanaISO;
+  const fechas = [hoyISO, haceUnaSemanaISO];
+  if (incluirExtra) fechas.push(fechaExtra);
+  const etiquetas = [
+    `${formatEtiquetaFecha(hoyISO)} (hoy)`,
+    `${formatEtiquetaFecha(haceUnaSemanaISO)} (semana pasada)`,
+  ];
+  if (incluirExtra) etiquetas.push(formatEtiquetaFecha(fechaExtra));
+
+  box.innerHTML = '<div class="card"><p style="font-size:13px; color:#6b7280;">Comparando…</p></div>';
+
+  try {
+    let dias = await Promise.all(fechas.map((f) => obtenerDiaGuardado(f)));
+
+    if (!dias[0]) throw new Error(`No hay datos guardados de hoy (${hoyISO}). Súbelos primero con "Buscar y guardar este día" o la planilla.`);
+
+    // Si algún día no tiene clima guardado todavía, lo traemos ahora y lo
+    // dejamos grabado para la próxima vez.
+    for (let i = 0; i < fechas.length; i++) {
+      if (dias[i] && !dias[i].clima) {
+        try { await adjuntarClimaAlDia(fechas[i]); dias[i] = await obtenerDiaGuardado(fechas[i]); } catch (e) {}
+      }
+    }
+
+    // El corte se hace con la hora de la ÚLTIMA BOLETA real registrada hoy
+    // (no la hora del reloj) -- así la comparación es justa: si la última
+    // venta de hoy fue a las 13:47, comparamos ambos días hasta las 13:00,
+    // no hasta la hora actual del reloj (que podría no tener ventas todavía).
+    const horasConVentaHoy = (dias[0].hourly || []).filter((h) => h.orders > 0).map((h) => Number(h.hour));
+    const horaCorte = horasConVentaHoy.length > 0 ? Math.max(...horasConVentaHoy) : new Date().getHours();
+    const horaUltimaBoletaTexto = horasConVentaHoy.length > 0 ? `${String(horaCorte).padStart(2,'0')}:00 hrs` : 'sin ventas registradas hoy';
+
+    const acumHasta = (dia, hastaHora) => (dia.hourly || [])
+      .filter((h) => Number(h.hour) <= hastaHora)
+      .reduce((acc, h) => ({ revenue: acc.revenue + h.revenue, orders: acc.orders + h.orders }), { revenue: 0, orders: 0 });
+
+    const climaTexto = (clima) => clima
+      ? `${clima.condicion} · ${clima.tempPromedio}°C · ${clima.precipitacionTotal}mm lluvia`
+      : 'Clima no disponible';
+
+    const rHoy = acumHasta(dias[0], horaCorte);
+
+    // Tendencia de cierre de hoy: usamos qué % de la venta TOTAL del día
+    // (venta completa, no solo hasta la hora de corte) ya se había hecho a
+    // esta misma hora la semana pasada -- así proyectamos hoy con el mismo
+    // "ritmo" de esa jornada (mañana lenta, almuerzo fuerte, etc.), en vez
+    // de una simple regla de tres plana.
+    //
+    // OJO: esta proyección por ritmo es matemáticamente correcta, pero muy
+    // inestable cuando todavía hay pocas boletas hoy (una sola boleta grande
+    // o chica puede mover el resultado un montón, dando números que a simple
+    // vista se ven "ilógicos" comparados con el promedio normal del negocio).
+    // Para evitarlo, la mezclamos con el promedio de los días completos
+    // anteriores: al principio del día pesa más el promedio histórico, y a
+    // medida que se acumulan boletas reales hoy, pesa cada vez más el ritmo
+    // calculado (hasta confiar 100% en él a partir de UMBRAL_ORDENES_CONFIANZA).
+    let proyeccionCierreHoy = null;
+    let proyeccionCierreHoyNota = '';
+    if (dias[1] && dias[1].totalRevenue > 0) {
+      const rSemanaPasadaHastaHora = acumHasta(dias[1], horaCorte).revenue;
+      const proporcionYaVendida = rSemanaPasadaHastaHora / dias[1].totalRevenue;
+      if (proporcionYaVendida > 0.02) { // evita proyecciones disparatadas con muy poca info
+        const proyeccionRitmo = rHoy.revenue / proporcionYaVendida;
+
+        const UMBRAL_ORDENES_CONFIANZA = 15;
+        const pesoRitmo = Math.min(1, rHoy.orders / UMBRAL_ORDENES_CONFIANZA);
+
+        let promedioDiasAnteriores = null;
+        try {
+          const aperturaStr = localStorage.getItem('fechaApertura') || '';
+          if (aperturaStr) {
+            const ayer = new Date(hoy);
+            ayer.setDate(ayer.getDate() - 1);
+            const apertura = new Date(aperturaStr + 'T00:00:00');
+            if (apertura <= ayer) {
+              const resumenAnterior = await obtenerResumenConCache(toYYYYMMDD(apertura), toYYYYMMDD(ayer), false);
+              const diasConDatos = (resumenAnterior.daily || []).filter((d) => d.revenue > 0);
+              if (diasConDatos.length > 0) {
+                promedioDiasAnteriores = resumenAnterior.totalRevenue / diasConDatos.length;
+              }
+            }
+          }
+        } catch (e) { /* si falla, seguimos solo con el ritmo */ }
+
+        if (promedioDiasAnteriores != null && pesoRitmo < 1) {
+          proyeccionCierreHoy = Math.round(pesoRitmo * proyeccionRitmo + (1 - pesoRitmo) * promedioDiasAnteriores);
+          proyeccionCierreHoyNota = `(${rHoy.orders} boleta${rHoy.orders === 1 ? '' : 's'} hoy · ${Math.round(pesoRitmo * 100)}% ritmo semana pasada + ${Math.round((1 - pesoRitmo) * 100)}% promedio días anteriores)`;
+        } else {
+          proyeccionCierreHoy = Math.round(proyeccionRitmo);
+          proyeccionCierreHoyNota = '(ritmo de la semana pasada)';
+        }
+      }
+    }
+
+    const columnas = fechas.map((f, i) => {
+      const dia = dias[i];
+      if (!dia) {
+        return `<div class="kpi"><p class="label">${etiquetas[i]}</p><p class="value" style="color:#9ca3af; font-size:14px;">Sin datos guardados</p></div>`;
+      }
+      const r = acumHasta(dia, horaCorte);
+      let diffHtml = '';
+      let notaHoy = '';
+      if (i === 0) {
+        const numeroTxt = dia.ultimaBoletaNumero ? ` (N° ${dia.ultimaBoletaNumero})` : '';
+        notaHoy = `<p class="delta" style="color:#2a78d6;">🧾 Última boleta medida: ${horaUltimaBoletaTexto}${numeroTxt}</p>`;
+        if (proyeccionCierreHoy != null) {
+          notaHoy += `<p class="delta" style="color:#7c3aed; font-weight:600;">📈 Tendencia de cierre: ~${fmt(proyeccionCierreHoy)} <span style="font-weight:400; color:#9ca3af;">${proyeccionCierreHoyNota}</span></p>`;
+        }
+      }
+      if (i > 0) {
+        const diffPct = r.revenue > 0 ? ((rHoy.revenue - r.revenue) / r.revenue) * 100 : null;
+        diffHtml = diffPct == null ? '' : (diffPct >= 0
+          ? `<p class="delta" style="color:#16a34a;">▲ ${diffPct.toFixed(1)}% vs hoy</p>`
+          : `<p class="delta" style="color:#dc2626;">▼ ${Math.abs(diffPct).toFixed(1)}% vs hoy</p>`);
+      }
+      return `<div class="kpi"><p class="label">${etiquetas[i]}</p><p class="value">${fmt(r.revenue)}</p><p class="delta">${r.orders} órdenes</p><p class="delta" style="color:#6b7280;">${climaTexto(dia.clima)}</p>${notaHoy}${diffHtml}</div>`;
+    });
+
+    // 3ra columna: si ya hay un día extra elegido, columnas ya lo incluye
+    // arriba. Si NO hay uno elegido, mostramos el recuadro rojo invitando a
+    // elegir uno -- y si está abierto, el calendario aparece ahí mismo.
+    let bloqueExtra = '';
+    if (!incluirExtra) {
+      bloqueExtra = `
+        <div class="kpi" id="kpiAgregarDia" style="border:2px dashed #dc2626; background:#fef2f2; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:90px;">
+          <p style="color:#dc2626; font-weight:600; font-size:14px; margin:0;">+ Comparar con otro día</p>
+        </div>`;
+    }
+
+    box.innerHTML = `
+      <div class="card">
+        <h2>Comparación hasta las ${String(horaCorte).padStart(2,'0')}:00 hrs (hora de la última boleta de hoy)</h2>
+        <div class="kpis" style="margin-top:10px;">${columnas.join('')}${bloqueExtra}</div>
+        <div id="calendarioExtraInlineWrap"></div>
+      </div>`;
+
+    if (!incluirExtra) {
+      document.getElementById('kpiAgregarDia').addEventListener('click', (e) => { e.stopPropagation(); toggleCalendarioExtra(); });
+      if (calendarioExtraAbierto) {
+        const cal = await renderCalendarioExtraInline();
+        document.getElementById('calendarioExtraInlineWrap').appendChild(cal);
+      }
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="error">❌ ${e.message}</div>`;
+  }
+});
+
+async function obtenerDiaGuardado(fechaISO) {
+  try {
+    const res = await fetch(`${STORE_URL}?fecha=${fechaISO}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.ok ? json.data : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// ===== Datos históricos: subir planilla de Toteat o buscar día por API =====
+
+function logHistorico(mensaje, tipo) {
+  const el = document.getElementById('historicoLog');
+  const color = tipo === 'ok' ? '#16a34a' : tipo === 'error' ? '#dc2626' : '#6b7280';
+  const linea = document.createElement('div');
+  linea.style.color = color;
+  linea.style.padding = '2px 0';
+  linea.textContent = mensaje;
+  el.prepend(linea);
+}
+
+async function guardarDiaEnStore(fechaISO, dataResumen) {
+  const res = await fetch(STORE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fecha: fechaISO, data: dataResumen }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'error al guardar');
+
+  // De paso, le pegamos el clima real de ese día (temperatura/lluvia) y lo
+  // dejamos guardado junto con la venta -- así queda registrado para poder
+  // cruzarlo después (día lluvioso vs. soleado).
+  try {
+    await adjuntarClimaAlDia(fechaISO);
+  } catch (e) {
+    // si el clima falla, no bloqueamos el guardado de la venta -- solo avisamos.
+    logHistorico(`⚠️ ${fechaISO} guardado, pero no se pudo traer el clima: ${e.message}`);
+  }
+
+  return json;
+}
+
+// Trae el clima de esa fecha y lo agrega al registro ya guardado (sin tocar
+// las ventas), para que quede todo junto: venta + clima real de ese día.
+async function adjuntarClimaAlDia(fechaISO) {
+  const resClima = await fetch(`/.netlify/functions/clima?fecha=${fechaISO}`);
+  const clima = await resClima.json();
+  if (!clima.ok) throw new Error(clima.error || 'clima no disponible');
+
+  const resDia = await fetch(`${STORE_URL}?fecha=${fechaISO}`);
+  if (!resDia.ok) return; // por si el día no quedó guardado por algún motivo raro
+  const json = await resDia.json();
+  if (!json.ok) return;
+
+  const dataConClima = Object.assign({}, json.data, {
+    clima: {
+      tempPromedio: clima.tempPromedio,
+      precipitacionTotal: clima.precipitacionTotal,
+      condicion: clima.condicion,
+    },
+  });
+  await fetch(STORE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fecha: fechaISO, data: dataConClima }),
+  });
+}
+
+// --- 2) Buscar un día puntual en Toteat y guardarlo ---
+document.getElementById('btnBuscarDia').addEventListener('click', async () => {
+  const fechaISO = document.getElementById('fechaBuscar').value;
+  if (!fechaISO) { logHistorico('Elige primero una fecha.', 'error'); return; }
+  const yyyymmdd = fechaISO.replace(/-/g, '');
+  logHistorico(`Buscando ${fechaISO} en Toteat…`);
+  try {
+    const res = await fetch(`${FUNCTION_URL}?ini=${yyyymmdd}&end=${yyyymmdd}`);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Toteat no respondió bien');
+    await guardarDiaEnStore(fechaISO, json.summary);
+    logHistorico(`✅ ${fechaISO} guardado: ${fmt(json.summary.totalRevenue)} · ${json.summary.totalOrders} órdenes.`, 'ok');
+    cargarDatos(false);
+    cargarPuntoEquilibrio(false);
+  } catch (e) {
+    logHistorico(`❌ ${fechaISO}: ${e.message}`, 'error');
+  }
+});
+
+// --- 1) Subir y procesar la planilla de Toteat (CSV/TSV) ---
+document.getElementById('btnProcesarCsv').addEventListener('click', async () => {
+  const files = Array.from(document.getElementById('fileCsv').files || []);
+  if (files.length === 0) { logHistorico('Elige primero uno o más archivos.', 'error'); return; }
+
+  if (files.length > 1) logHistorico(`Procesando ${files.length} archivos, uno por uno…`);
+  for (const file of files) {
+    logHistorico(`Leyendo ${file.name}…`);
+    try {
+      const filas = await parsearCsv(file, '\t');
+      await procesarFilasCsv(filas, file);
+    } catch (e) {
+      logHistorico(`❌ ${file.name}: ${e.message}`, 'error');
+    }
+  }
+  if (files.length > 1) logHistorico(`Listo, terminados los ${files.length} archivos.`);
+
+  logHistorico('Actualizando dashboard y punto de equilibrio con los datos nuevos…');
+  cargarDatos(false);
+  cargarPuntoEquilibrio(false);
+});
+
+function parsearCsv(file, delimiter) {
+  return new Promise((resolve, reject) => {
+    Papa.parse(file, {
+      header: true,
+      delimiter,
+      skipEmptyLines: true,
+      complete: (resultado) => resolve(resultado.data),
+      error: (e) => reject(e),
+    });
+  });
+}
+
+async function procesarFilasCsv(filas, file) {
+  // Si el delimitador tab no separó bien (archivo realmente en comas), reintentamos con coma.
+  if (filas.length && Object.keys(filas[0]).length <= 1) {
+    logHistorico(`${file.name}: no parece separado por tabulaciones, probando con comas…`);
+    filas = await parsearCsv(file, ',');
+  }
+
+  // Agrupamos todas las filas por fecha (columna "Fecha de creacion", que
+  // viene repetida en cada línea de producto, no solo en la primera).
+  const porFecha = new Map();
+  for (const fila of filas) {
+    const fecha = (fila['Fecha de creacion'] || '').trim();
+    if (!fecha) continue;
+    if (!porFecha.has(fecha)) porFecha.set(fecha, []);
+    porFecha.get(fecha).push(fila);
+  }
+
+  if (porFecha.size === 0) {
+    logHistorico(`❌ ${file.name}: no se encontraron filas con "Fecha de creacion" válida.`, 'error');
+    return;
+  }
+
+  logHistorico(`${file.name}: ${porFecha.size} fecha(s) distintas. Procesando…`);
+
+  for (const [fecha, filasDelDia] of porFecha.entries()) {
+    try {
+      const yaExistia = await fechaYaExisteEnStore(fecha);
+      const resumen = agregarDiaDesdeCSV(filasDelDia);
+      await guardarDiaEnStore(fecha, resumen);
+      const accion = yaExistia ? 'reemplazado (ya existía)' : 'guardado por primera vez';
+      logHistorico(`✅ ${fecha} ${accion}: ${fmt(resumen.totalRevenue)} · ${resumen.totalOrders} órdenes.`, 'ok');
+    } catch (e) {
+      logHistorico(`❌ ${fecha}: ${e.message}`, 'error');
+    }
+  }
+}
+
+async function fechaYaExisteEnStore(fechaISO) {
+  try {
+    const res = await fetch(`${STORE_URL}?fecha=${fechaISO}`);
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+// --- Descargar todo el historial guardado como .json (para subirlo a otra app) ---
+document.getElementById('btnDescargarHistorial').addEventListener('click', async () => {
+  const btn = document.getElementById('btnDescargarHistorial');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Preparando descarga…';
+
+  try {
+    const resList = await fetch(`${STORE_URL}?action=list`);
+    const listJson = await resList.json();
+    const fechas = listJson.ok ? (listJson.fechas || []) : [];
+
+    if (fechas.length === 0) {
+      logHistorico('No hay ningún día guardado todavía -- no hay nada que descargar.');
+      return;
+    }
+
+    const ini = fechas[0];
+    const end = fechas[fechas.length - 1];
+    const resRango = await fetch(`${STORE_URL}?ini=${ini}&end=${end}`);
+    const rangoJson = await resRango.json();
+    if (!rangoJson.ok) throw new Error(rangoJson.error || 'No se pudo leer el historial guardado.');
+
+    // Mismo formato { fecha, data } que espera dias-guardados.js al RECIBIR
+    // un día (POST body: { fecha, data }) -- así este archivo se puede volver
+    // a subir día por día a este mismo almacén, o a otra app que lo lea igual.
+    const exportado = {
+      exportadoEl: new Date().toISOString(),
+      totalDias: rangoJson.dias.length,
+      dias: rangoJson.dias,
+    };
+
+    const blob = new Blob([JSON.stringify(exportado, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `norai-historial-ventas_${ini}_a_${end}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    logHistorico(`✅ Descargado historial de ${rangoJson.dias.length} día(s) (${ini} a ${end}).`, 'ok');
+  } catch (e) {
+    logHistorico(`❌ No se pudo descargar el historial: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+});
+
+// Reproduce, en el navegador, la misma agregación que hace sales-analytics.js
+// pero a partir de las filas de la planilla exportada por Toteat en vez de
+// la API. Un día = un array de filas (todas las líneas de producto de todas
+// las órdenes de ese día).
+function agregarDiaDesdeCSV(filasDelDia) {
+  const numero = (v) => { const n = Number(String(v||'').replace(/[^0-9.-]/g,'')); return isNaN(n) ? 0 : n; };
+
+  // Filas "cabecera de orden": tienen "Pago total" no vacío (viene una sola
+  // vez por orden, en su primera línea).
+  const ordenesVistas = new Set();
+  const filasOrden = filasDelDia.filter((f) => {
+    const pago = (f['Pago total'] || '').toString().trim();
+    const id = f['ID de orden'];
+    if (!pago || ordenesVistas.has(id)) return false;
+    ordenesVistas.add(id);
+    return true;
+  });
+
+  const totalRevenue = filasOrden.reduce((acc, f) => acc + numero(f['Pago total']), 0);
+  const totalOrders = filasOrden.length;
+
+  const byHour = new Map();
+  let ultimaHoraStr = '', ultimaBoletaNumero = null;
+  for (const f of filasOrden) {
+    const hora = (f['Hora de creacion'] || '').slice(0,2);
+    if (!hora) continue;
+    const h = byHour.get(hora) || { revenue: 0, orders: 0 };
+    h.revenue += numero(f['Pago total']);
+    h.orders += 1;
+    byHour.set(hora, h);
+
+    // Vamos guardando la orden con la hora de creación más tardía -- esa es
+    // "la última boleta" del día, y su Folio es el N° real de boleta.
+    const horaCompleta = f['Hora de creacion'] || '';
+    if (horaCompleta > ultimaHoraStr) {
+      ultimaHoraStr = horaCompleta;
+      ultimaBoletaNumero = (f['Folio'] || '').toString().trim() || null;
+    }
+  }
+
+  // Filas "producto real" (no modificadores): la planilla marca los
+  // modificadores (sabor, tipo de leche) con la columna "BA." llena.
+  const filasProducto = filasDelDia.filter((f) => !(f['BA.'] || '').toString().trim());
+
+  const byCategory = new Map();
+  const byProduct = new Map();
+  const byProductHour = new Map(); // "nombre|hora" -> {revenue, quantity} -- para el análisis interactivo
+  for (const f of filasProducto) {
+    const cat = (f['Categorías de Productos/Platos'] || 'Sin categoría').trim() || 'Sin categoría';
+    const nombre = (f['Nombre'] || '(sin nombre)').trim() || '(sin nombre)';
+    const cantidad = numero(f['Cantidad']);
+    const monto = numero(f['Precio a Pagar']);
+
+    const c = byCategory.get(cat) || { revenue: 0, quantity: 0 };
+    c.revenue += monto; c.quantity += cantidad;
+    byCategory.set(cat, c);
+
+    const p = byProduct.get(nombre) || { revenue: 0, quantity: 0, category: cat };
+    p.revenue += monto; p.quantity += cantidad;
+    byProduct.set(nombre, p);
+
+    // Hora de este producto puntual: usamos "Hora Pedido" (por línea) y si no
+    // viene, caemos a "Hora de creacion" (la de la orden completa).
+    const horaProducto = ((f['Hora Pedido'] || f['Hora de creacion'] || '').slice(0,2));
+    if (horaProducto) {
+      const clave = nombre + '|' + horaProducto;
+      const ph = byProductHour.get(clave) || { revenue: 0, quantity: 0 };
+      ph.revenue += monto; ph.quantity += cantidad;
+      byProductHour.set(clave, ph);
+    }
+  }
+
+  const categories = [...byCategory.entries()]
+    .map(([name, v]) => ({ name, revenue: Math.round(v.revenue), quantity: v.quantity, pct: totalRevenue>0? Math.round((v.revenue/totalRevenue)*1000)/10 : 0 }))
+    .sort((a,b) => b.revenue - a.revenue);
+  const products = [...byProduct.entries()]
+    .map(([name, v]) => ({ name, revenue: Math.round(v.revenue), quantity: v.quantity, category: v.category }))
+    .sort((a,b) => b.revenue - a.revenue);
+  const hourly = [...byHour.entries()]
+    .map(([hour, v]) => ({ hour, revenue: Math.round(v.revenue), orders: v.orders }))
+    .sort((a,b) => a.hour.localeCompare(b.hour));
+
+  // productsByHour como objeto anidado { "Nombre": { "13": {revenue,quantity}, ... }, ... }
+  // -- así el análisis interactivo puede mostrar el patrón por hora de UN producto puntual.
+  const productsByHour = {};
+  for (const [clave, v] of byProductHour.entries()) {
+    const [nombre, hora] = clave.split('|');
+    if (!productsByHour[nombre]) productsByHour[nombre] = {};
+    productsByHour[nombre][hora] = { revenue: Math.round(v.revenue), quantity: v.quantity };
+  }
+
+  const fechaOrigen = (filasDelDia[0]['Fecha de creacion'] || '').trim();
+
+  // Detalle por boleta: cada orden real (por "ID de orden") con su Folio
+  // (N° de boleta), hora y la lista de productos+cantidad que llevó. Esto es
+  // lo que permite, al descargar el historial, saber exactamente qué se
+  // vendió EN CADA boleta -- útil para otra app que necesite ese detalle
+  // (ej. trazabilidad, pedidos a fábrica cruzados con boletas puntuales, etc.).
+  const boletasMap = new Map(); // ID de orden -> { numero, hora, total, productos: Map(nombre->cantidad) }
+  for (const f of filasOrden) {
+    const idOrden = f['ID de orden'];
+    boletasMap.set(idOrden, {
+      numero: (f['Folio'] || '').toString().trim() || null,
+      hora: (f['Hora de creacion'] || '').slice(0, 5) || null,
+      total: numero(f['Pago total']),
+      productos: new Map(),
+    });
+  }
+  for (const f of filasProducto) {
+    const idOrden = f['ID de orden'];
+    const boleta = boletasMap.get(idOrden);
+    if (!boleta) continue; // no debería pasar, pero por si una fila de producto no calza con ninguna cabecera
+    const nombreProd = (f['Nombre'] || '(sin nombre)').trim() || '(sin nombre)';
+    const cantidadProd = numero(f['Cantidad']);
+    boleta.productos.set(nombreProd, (boleta.productos.get(nombreProd) || 0) + cantidadProd);
+  }
+  const boletas = [...boletasMap.values()]
+    .map((b) => ({
+      numero: b.numero,
+      hora: b.hora,
+      total: Math.round(b.total),
+      productos: [...b.productos.entries()].map(([nombre, cantidad]) => ({ nombre, cantidad })),
+    }))
+    .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+
+  return {
+    totalRevenue: Math.round(totalRevenue),
+    totalOrders,
+    avgTicket: totalOrders>0? Math.round(totalRevenue/totalOrders) : 0,
+    categories,
+    products,
+    hourly,
+    productsByHour,
+    boletas,
+    ultimaBoletaNumero,
+    ultimaBoletaHora: ultimaHoraStr ? ultimaHoraStr.slice(0,5) : null,
+    daily: [{ date: fechaOrigen, revenue: Math.round(totalRevenue), orders: totalOrders, avgTicket: totalOrders>0? Math.round(totalRevenue/totalOrders):0 }],
+    origen: 'planilla',
+  };
+}
+
+// Al abrir el dashboard, mostramos de una vez la comparación de hoy contra
+// la semana pasada (sin esperar a que alguien toque el botón).
+document.getElementById('btnCompararHoraExacta').click();
+
 </script>
 </body>
 </html>
