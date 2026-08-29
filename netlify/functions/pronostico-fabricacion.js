@@ -62,7 +62,7 @@ exports.handler = async () => {
 
       let necesidadProyectada = 0;
       for (const receta of recetasDeEsteInsumo) {
-        const promedio = promedioVentaProducto(historial, receta.producto, diaSemanaObjetivo);
+        const promedio = promedioVentaProducto(historial, receta, diaSemanaObjetivo);
         necesidadProyectada += promedio * receta.cantidadPorUnidad;
       }
 
@@ -100,13 +100,12 @@ exports.handler = async () => {
 // el mismo día de la semana (0=domingo...6=sábado). Si no hay ninguno,
 // promedia con TODOS los días guardados (mejor una estimación gruesa que
 // nada).
-function promedioVentaProducto(historial, producto, diaSemanaObjetivo) {
+function promedioVentaProducto(historial, receta, diaSemanaObjetivo) {
   const cantidadesMismoDia = [];
   const cantidadesTodas = [];
 
   for (const dia of historial) {
-    const p = (dia.products || []).find((x) => x.name === producto);
-    const cantidad = p ? p.quantity : 0;
+    const cantidad = cantidadDelDia(dia, receta);
     cantidadesTodas.push(cantidad);
 
     const fecha = new Date(dia.fecha + 'T00:00:00');
@@ -124,6 +123,19 @@ function promedioVentaProducto(historial, producto, diaSemanaObjetivo) {
     return conVentaTodas.reduce((s, c) => s + c, 0) / conVentaTodas.length;
   }
   return 0;
+}
+
+// Cuánto se vendió de la receta en ESE día -- nombre exacto, o suma de
+// todos los productos que empiecen con la base y contengan el sabor
+// (patronToken), igual que en pedido-fabrica.js.
+function cantidadDelDia(dia, receta) {
+  if (!receta.patronToken) {
+    const p = (dia.products || []).find((x) => x.name === receta.producto);
+    return p ? p.quantity : 0;
+  }
+  return (dia.products || [])
+    .filter((p) => p.name.startsWith(receta.producto) && p.name.includes(receta.patronToken))
+    .reduce((s, p) => s + p.quantity, 0);
 }
 
 function round2(n) {

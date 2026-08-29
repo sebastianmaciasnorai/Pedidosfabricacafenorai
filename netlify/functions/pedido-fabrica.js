@@ -82,7 +82,7 @@ exports.handler = async (event) => {
     // Explota proyección de productos -> necesidad de insumos.
     const necesidadPorInsumo = new Map();
     for (const receta of recetas) {
-      const proyeccionProducto = proyeccionPorProducto.get(receta.producto) || 0;
+      const proyeccionProducto = obtenerProyeccion(receta, proyeccionPorProducto);
       if (proyeccionProducto === 0) continue;
       const necesidad = proyeccionProducto * receta.cantidadPorUnidad;
       necesidadPorInsumo.set(receta.insumo, (necesidadPorInsumo.get(receta.insumo) || 0) + necesidad);
@@ -131,6 +131,25 @@ exports.handler = async (event) => {
     return jsonResponse(502, { ok: false, error: 'No se pudo calcular el pedido a fábrica.', detail: String(e) });
   }
 };
+
+// Si la receta tiene "patronToken" (viene de la pantalla de "sabores
+// agrupados"), suma la proyección de TODOS los productos que empiecen con
+// el nombre base de la receta Y contengan ese token en algún lado del
+// nombre (ej: "Club Desayuno Muffin (Latte, M. Arándano)" contiene el
+// token "M. Arándano"). Si no tiene patronToken, es una receta normal de
+// nombre exacto.
+function obtenerProyeccion(receta, proyeccionPorProducto) {
+  if (!receta.patronToken) {
+    return proyeccionPorProducto.get(receta.producto) || 0;
+  }
+  let total = 0;
+  for (const [nombre, cantidad] of proyeccionPorProducto.entries()) {
+    if (nombre.startsWith(receta.producto) && nombre.includes(receta.patronToken)) {
+      total += cantidad;
+    }
+  }
+  return total;
+}
 
 function sumarDiasYYYYMMDD(yyyymmdd, dias) {
   const d = new Date(Number(yyyymmdd.slice(0, 4)), Number(yyyymmdd.slice(4, 6)) - 1, Number(yyyymmdd.slice(6, 8)));
