@@ -113,6 +113,9 @@
 <!-- ================= TAB: PEDIDO ================= -->
 <div class="tab-panel activo" id="tab-pedido">
   <p class="sub">Proyección de venta de hoy, explotada a insumos, comparada contra tu stock.</p>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+    <button class="add" id="btn-actualizar-toteat">🔄 Actualizar con Toteat (en vivo)</button>
+  </div>
   <div id="fecha"></div>
   <div id="loading-pedido">Calculando...</div>
   <div class="alerta-banner" id="banner-alerta"></div>
@@ -216,9 +219,22 @@ tabButtons.forEach((btn) => {
 // ===================== PEDIDO DE HOY =====================
 (function () {
   const FN = '/.netlify/functions/pedido-fabrica';
+  const btnActualizar = document.getElementById('btn-actualizar-toteat');
+
+  function horaActualCorta() {
+    const d = new Date();
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
 
   async function cargar() {
     const loading = document.getElementById('loading-pedido');
+    // limpia estado previo (para que "Actualizar" no vaya acumulando banners viejos)
+    document.getElementById('banner-alerta').classList.remove('visible');
+    document.getElementById('banner-ok').classList.remove('visible');
+    document.getElementById('seccion-detalle').style.display = 'none';
+    loading.style.display = 'block';
+    loading.textContent = 'Calculando...';
+
     try {
       const res = await fetch(FN);
       const json = await res.json();
@@ -230,23 +246,26 @@ tabButtons.forEach((btn) => {
         return;
       }
 
-      let textoFecha = `Proyectando ${json.fechaProyectada || ''} · historial ${json.rangeIni || ''}–${json.rangeEnd || ''}`;
+      // Línea de estado, al estilo del dashboard de ventas: cuándo se
+      // consultó Toteat y hasta qué boleta llegó la información.
+      let textoFecha = `Datos al ${horaActualCorta()} hrs · Proyectando ${json.fechaProyectada || ''}`;
       if (json.checkpoint) {
         try {
           const cp = json.checkpoint;
-          const hora = cp.ultimaHoraConVentas != null ? `${cp.ultimaHoraConVentas}:00` : '—';
-          let sinc = '—';
+          const horaUltimaBoleta = cp.ultimaHoraConVentas != null ? `${String(cp.ultimaHoraConVentas).padStart(2, '0')}:00 hrs` : 'sin boletas registradas';
+          let horaSinc = '—';
           if (cp.ultimaSincronizacion) {
             const d = new Date(cp.ultimaSincronizacion);
             if (!isNaN(d.getTime())) {
-              sinc = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+              horaSinc = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
             }
           }
-          textoFecha += `\nSincronizado ${sinc} · última boleta vista: ${cp.fechaHoy || ''} ${hora} · ${cp.ordenesHoy ?? '—'} boletas hoy`;
+          textoFecha += `\nÚltima sincronización con Toteat: ${horaSinc} hrs · Última boleta vista: ${horaUltimaBoleta} (${cp.fechaHoy || ''}) · ${cp.ordenesHoy ?? '—'} boletas hoy`;
         } catch (e) {
           // si algo falla formateando el checkpoint, no rompe el resto de la pantalla
         }
       }
+      textoFecha += `\nHistorial usado: ${json.rangeIni || ''}–${json.rangeEnd || ''}`;
       document.getElementById('fecha').textContent = textoFecha;
       document.getElementById('fecha').style.whiteSpace = 'pre-line';
 
@@ -293,6 +312,15 @@ tabButtons.forEach((btn) => {
       loading.textContent = 'Error de conexión: ' + e.message;
     }
   }
+
+  btnActualizar.addEventListener('click', async () => {
+    btnActualizar.disabled = true;
+    const textoOriginal = btnActualizar.textContent;
+    btnActualizar.textContent = '🔄 Actualizando...';
+    await cargar();
+    btnActualizar.textContent = textoOriginal;
+    btnActualizar.disabled = false;
+  });
 
   cargar();
 })();
@@ -376,7 +404,7 @@ function cargarAdmin() {
 
     (resRecetas.data || []).forEach((r) => {
       if (!mapaInsumos[r.producto]) mapaInsumos[r.producto] = [];
-      mapaInsumos[r.producto].push({ insumo: r.insumo, cantidadPorUnidad: r.cantidadPorUnidad });
+      mapaInsumos[r.producto].push({ insumo: r.insumo, cantidadTexto: formatCantidad(r.cantidadPorUnidad, r.unidad || 'un') });
     });
 
     document.getElementById('buscador').style.display = 'block';
@@ -442,7 +470,7 @@ function renderProducto(p) {
     btn.textContent = '+ insumo';
     btn.addEventListener('click', () => {
       mapaInsumos[p.producto] = mapaInsumos[p.producto] || [];
-      mapaInsumos[p.producto].push({ insumo: '', cantidadPorUnidad: '' });
+      mapaInsumos[p.producto].push({ insumo: '', cantidadTexto: '' });
       pintarInsumos();
     });
     insumosBox.appendChild(btn);
@@ -453,12 +481,12 @@ function renderProducto(p) {
     fila.className = 'insumo-fila';
     fila.innerHTML = `
       <input type="text" placeholder="Insumo (ej: Lomo vetado sellado al vacío)" value="${escapeAttr(f.insumo)}">
-      <input type="number" step="0.01" placeholder="Cant./u" value="${f.cantidadPorUnidad}">
+      <input type="text" placeholder="100 g / 1 un" value="${escapeAttr(f.cantidadTexto || '')}" style="flex:1;text-align:right;">
       <button title="Quitar">✕</button>
     `;
     const [inputInsumo, inputCant] = fila.querySelectorAll('input');
     inputInsumo.addEventListener('input', () => { mapaInsumos[producto][idx].insumo = inputInsumo.value; });
-    inputCant.addEventListener('input', () => { mapaInsumos[producto][idx].cantidadPorUnidad = Number(inputCant.value); });
+    inputCant.addEventListener('input', () => { mapaInsumos[producto][idx].cantidadTexto = inputCant.value; });
     fila.querySelector('button').addEventListener('click', () => {
       mapaInsumos[producto].splice(idx, 1);
       if (mapaInsumos[producto].length === 0) delete mapaInsumos[producto];
@@ -472,7 +500,7 @@ function renderProducto(p) {
   checkbox.addEventListener('change', () => {
     if (checkbox.checked) {
       row.classList.add('marcado');
-      if (!mapaInsumos[p.producto]) mapaInsumos[p.producto] = [{ insumo: '', cantidadPorUnidad: '' }];
+      if (!mapaInsumos[p.producto]) mapaInsumos[p.producto] = [{ insumo: '', cantidadTexto: '' }];
       pintarInsumos();
     } else {
       row.classList.remove('marcado');
@@ -486,14 +514,39 @@ function renderProducto(p) {
 function escapeAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
 function formatoMonto(n) { return Math.round(Number(n) || 0).toLocaleString('es-CL'); }
 
+// Interpreta texto libre como "200", "200 g", "0.2 kg", "1 un" -> siempre
+// normaliza a gramos (si es peso) o a unidades (si no se especifica peso).
+function parseCantidad(texto) {
+  const str = String(texto || '').trim().toLowerCase().replace(',', '.');
+  const match = str.match(/^([\d.]+)\s*(kg|kilos?|g|gr|gramos?|un|und|unidad(?:es)?)?$/);
+  if (!match) return null;
+  const num = parseFloat(match[1]);
+  if (isNaN(num)) return null;
+  const u = match[2] || 'un';
+  if (/^(kg|kilos?)$/.test(u)) return { valor: num * 1000, unidad: 'g' };
+  if (/^(g|gr|gramos?)$/.test(u)) return { valor: num, unidad: 'g' };
+  return { valor: num, unidad: 'un' };
+}
+
+// Formatea de vuelta a texto legible para mostrar en el campo.
+function formatCantidad(valor, unidad) {
+  const n = Number(valor) || 0;
+  if (unidad === 'g') {
+    if (n >= 1000 && n % 1000 === 0) return `${n / 1000} kg`;
+    return `${n} g`;
+  }
+  return `${n} un`;
+}
+
 document.getElementById('buscador').addEventListener('input', (e) => renderCategorias(e.target.value));
 
 function filaStock(r = {}) {
   const tr = document.createElement('tr');
+  const envaseTexto = r.tamanoEnvaseTexto ?? formatCantidad(r.tamanoEnvase ?? 1, r.unidadEnvase || 'un');
   tr.innerHTML = `
     <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}"></td>
     <td><input type="number" step="1" min="0" data-field="diasElaboracion" value="${r.diasElaboracion ?? 0}"></td>
-    <td><input type="number" step="1" min="1" data-field="tamanoEnvase" value="${r.tamanoEnvase ?? 1}"></td>
+    <td><input type="text" data-field="tamanoEnvaseTexto" placeholder="1000 g / 1 un" value="${escapeAttr(envaseTexto)}"></td>
     <td><input type="number" step="0.1" data-field="stockActual" value="${r.stockActual ?? ''}"></td>
     <td><input type="number" step="0.1" data-field="stockMinimo" value="${r.stockMinimo ?? ''}"></td>
     <td><button class="icon" data-remove>✕</button></td>
@@ -545,8 +598,13 @@ function leerStockTabla() {
   return filas.map((tr) => {
     const obj = {};
     tr.querySelectorAll('input').forEach((input) => {
+      if (input.dataset.field === 'tamanoEnvaseTexto') return;
       obj[input.dataset.field] = input.type === 'number' ? Number(input.value) : input.value.trim();
     });
+    const envaseInput = tr.querySelector('[data-field="tamanoEnvaseTexto"]');
+    const parsed = parseCantidad(envaseInput ? envaseInput.value : '') || { valor: 1, unidad: 'un' };
+    obj.tamanoEnvase = parsed.valor;
+    obj.unidadEnvase = parsed.unidad;
     return obj;
   }).filter((o) => o.insumo);
 }
@@ -554,13 +612,18 @@ function leerStockTabla() {
 function leerRecetas() {
   const recetas = [];
   Object.entries(mapaInsumos).forEach(([producto, filas]) => {
-    const filasValidas = filas.filter((f) => f.insumo && f.cantidadPorUnidad > 0);
+    const filasValidas = [];
+    filas.forEach((f) => {
+      if (!f.insumo) return;
+      const parsed = parseCantidad(f.cantidadTexto);
+      if (parsed && parsed.valor > 0) {
+        filasValidas.push({ insumo: f.insumo.trim(), cantidadPorUnidad: parsed.valor, unidad: parsed.unidad });
+      }
+    });
     if (filasValidas.length > 0) {
-      filasValidas.forEach((f) => {
-        recetas.push({ producto, insumo: f.insumo.trim(), cantidadPorUnidad: Number(f.cantidadPorUnidad) });
-      });
+      filasValidas.forEach((f) => recetas.push({ producto, insumo: f.insumo, cantidadPorUnidad: f.cantidadPorUnidad, unidad: f.unidad }));
     } else {
-      recetas.push({ producto, insumo: producto, cantidadPorUnidad: 1 });
+      recetas.push({ producto, insumo: producto, cantidadPorUnidad: 1, unidad: 'un' });
     }
   });
   return recetas;
