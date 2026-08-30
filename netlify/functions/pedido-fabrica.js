@@ -22,6 +22,13 @@
 // completa del día estaríamos descontando esas ventas DOS VECES. Por eso
 // la resta es solo "lo que falta por vender hoy", no el total proyectado.
 //
+// CAMBIO (esta versión): "detalle" ahora lista TODOS los insumos
+// configurados en stock (no solo los que tienen venta proyectada hoy), y
+// se ordena por CRITICIDAD (semáforo) -- rojo primero (ya en quiebre o
+// negativo), luego amarillo (bajo mínimo pero todavía positivo), y verde
+// al final (stock ok). Antes solo aparecían insumos con demanda hoy y se
+// ordenaba por cantidad sugerida a pedir.
+//
 // GET /.netlify/functions/pedido-fabrica?end=20260828&dias=14
 //   end  -> día que se proyecta (default: hoy)
 //   dias -> cuántos días hacia atrás pedirle a Toteat para tener buen
@@ -38,7 +45,7 @@
 //   detalle: [
 //     { insumo, necesidadHoyUnidadReceta, necesidadHoyEnvases, tamanoEnvase,
 //       stockActual, stockMinimo, stockProyectadoFinDia, bajoMinimo,
-//       sugeridoPedirAFabrica, ultimoConteoFecha },
+//       sugeridoPedirAFabrica, ultimoConteoFecha, nivelCriticidad },
 //     ...
 //   ]
 // }
@@ -113,9 +120,14 @@ exports.handler = async (event) => {
     const stockCalculado = calcularStockPorInsumo({ recetas, stock: stock || [], mermas: mermas || [], recepciones: recepciones || [], porDia: resumen.porDia });
     const stockPorInsumo = new Map(stockCalculado.map((s) => [s.insumo, s]));
 
+    // Todos los insumos: los que tienen stock configurado Y los que tienen
+    // demanda hoy (por si algún insumo con venta hoy no tuviera fila de
+    // stock todavía -- así igual aparece en la lista con stock 0).
+    const todosLosInsumos = new Set([...stockPorInsumo.keys(), ...necesidadRestantePorInsumo.keys()]);
+
     const detalle = [];
-    for (const [insumo, necesidadUnidadReceta] of necesidadRestantePorInsumo.entries()) {
-      if (necesidadUnidadReceta === 0) continue;
+    for (const insumo of todosLosInsumos) {
+      const necesidadUnidadReceta = necesidadRestantePorInsumo.get(insumo) || 0;
       const s = stockPorInsumo.get(insumo);
       const tamanoEnvase = s && s.tamanoEnvase > 0 ? s.tamanoEnvase : 1;
       const necesidadEnvases = necesidadUnidadReceta / tamanoEnvase;
@@ -137,10 +149,16 @@ exports.handler = async (event) => {
         bajoMinimo,
         sugeridoPedirAFabrica: sugeridoPedir,
         ultimoConteoFecha: s ? s.ultimoConteoFecha : null,
+        nivelCriticidad: nivelCriticidad(stockProyectado, bajoMinimo),
       });
     }
 
-    detalle.sort((a, b) => b.sugeridoPedirAFabrica - a.sugeridoPedirAFabrica);
+    // Rojo (0) primero, luego amarillo (1), luego verde (2). Dentro de
+    // cada color, el más crítico (stock proyectado más bajo) arriba.
+    detalle.sort((a, b) => {
+      if (a.nivelCriticidad !== b.nivelCriticidad) return a.nivelCriticidad - b.nivelCriticidad;
+      return a.stockProyectadoFinDia - b.stockProyectadoFinDia;
+    });
     const alertas = detalle.filter((d) => d.bajoMinimo);
 
     return jsonResponse(200, {
@@ -156,6 +174,15 @@ exports.handler = async (event) => {
     return jsonResponse(502, { ok: false, error: 'No se pudo calcular el pedido a fábrica.', detail: String(e) });
   }
 };
+
+// 0 = rojo (quiebre: stock proyectado en 0 o negativo)
+// 1 = amarillo (bajo el mínimo pero todavía positivo)
+// 2 = verde (sobre el mínimo)
+function nivelCriticidad(stockProyectado, bajoMinimo) {
+  if (stockProyectado <= 0) return 0;
+  if (bajoMinimo) return 1;
+  return 2;
+}
 
 function sumarDiasYYYYMMDD(yyyymmdd, dias) {
   const d = new Date(Number(yyyymmdd.slice(0, 4)), Number(yyyymmdd.slice(4, 6)) - 1, Number(yyyymmdd.slice(6, 8)));
