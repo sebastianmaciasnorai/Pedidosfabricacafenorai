@@ -118,7 +118,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.2</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.3</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -836,6 +836,7 @@ function renderTokenRow(base, tok, key) {
     `;
     const [inputInsumo, inputCant] = fila.querySelectorAll('input');
     inputInsumo.addEventListener('input', () => { mapaPatrones[key][idx].insumo = inputInsumo.value; });
+    inputInsumo.addEventListener('blur', () => sincronizarInsumosAlStock({ silencioso: true }));
     inputCant.addEventListener('input', () => { mapaPatrones[key][idx].cantidadTexto = inputCant.value; });
     fila.querySelector('button').addEventListener('click', () => {
       mapaPatrones[key].splice(idx, 1);
@@ -852,6 +853,7 @@ function renderTokenRow(base, tok, key) {
       row.classList.add('marcado');
       if (!mapaPatrones[key]) mapaPatrones[key] = [{ insumo: '', cantidadTexto: '' }];
       pintarInsumos();
+      sincronizarInsumosAlStock({ silencioso: true });
     } else {
       row.classList.remove('marcado');
       delete mapaPatrones[key];
@@ -904,6 +906,7 @@ function renderProducto(p) {
     `;
     const [inputInsumo, inputCant] = fila.querySelectorAll('input');
     inputInsumo.addEventListener('input', () => { mapaInsumos[producto][idx].insumo = inputInsumo.value; });
+    inputInsumo.addEventListener('blur', () => sincronizarInsumosAlStock({ silencioso: true }));
     inputCant.addEventListener('input', () => { mapaInsumos[producto][idx].cantidadTexto = inputCant.value; });
     fila.querySelector('button').addEventListener('click', () => {
       mapaInsumos[producto].splice(idx, 1);
@@ -920,6 +923,7 @@ function renderProducto(p) {
       row.classList.add('marcado');
       if (!mapaInsumos[p.producto]) mapaInsumos[p.producto] = [{ insumo: '', cantidadTexto: '' }];
       pintarInsumos();
+      sincronizarInsumosAlStock({ silencioso: true });
     } else {
       row.classList.remove('marcado');
       delete mapaInsumos[p.producto];
@@ -1080,9 +1084,10 @@ document.getElementById('input-excel').addEventListener('change', async (e) => {
     const { marcados, desmarcados } = aplicarFilasExcel(filas);
 
     renderCategorias(document.getElementById('buscador').value);
+    const agregadosAlStock = sincronizarInsumosAlStock({ silencioso: true });
     guardarBorradorDebounced();
     document.getElementById('barra-guardar').classList.add('visible');
-    statusEl.textContent = `Excel importado: ${marcados} producto(s)/variante(s) marcados, ${desmarcados} desmarcados. Revisa los cambios y presiona "Guardar todo" para confirmarlos.`;
+    statusEl.textContent = `Excel importado: ${marcados} producto(s)/variante(s) marcados, ${desmarcados} desmarcados, ${agregadosAlStock} insumo(s) nuevo(s) agregados al stock. Revisa los cambios y presiona "Guardar todo" para confirmarlos.`;
     statusEl.className = 'status ok';
   } catch (err) {
     statusEl.textContent = 'Error leyendo el Excel: ' + err.message;
@@ -1151,34 +1156,62 @@ document.getElementById('btn-add-stock').addEventListener('click', () => {
   document.querySelector('#tabla-stock tbody').appendChild(filaStock());
 });
 
-document.getElementById('btn-sync-stock').addEventListener('click', () => {
-  const insumosEnUso = new Set();
+// Junta, de mapaInsumos y mapaPatrones, el insumo "efectivo" de cada
+// producto/sabor marcado -- si no se escribió un insumo, el efectivo es
+// el propio producto (o "base (sabor)" para patrones), igual que hace
+// leerRecetas() al guardar. Así la tabla de stock siempre refleja de qué
+// depende realmente la fábrica, esté o no completo el texto del insumo.
+function insumosEfectivosActuales() {
+  const insumos = new Set();
   Object.entries(mapaInsumos).forEach(([producto, filas]) => {
     const conTexto = filas.filter((f) => f.insumo);
     if (conTexto.length) {
-      conTexto.forEach((f) => insumosEnUso.add(f.insumo));
+      conTexto.forEach((f) => insumos.add(f.insumo));
     } else {
-      insumosEnUso.add(producto);
+      insumos.add(producto);
     }
   });
-  Object.values(mapaPatrones).forEach((filas) => {
-    filas.forEach((f) => { if (f.insumo) insumosEnUso.add(f.insumo); });
+  Object.entries(mapaPatrones).forEach(([key, filas]) => {
+    const [base, token] = key.split('|||');
+    const conTexto = filas.filter((f) => f.insumo);
+    if (conTexto.length) {
+      conTexto.forEach((f) => insumos.add(f.insumo));
+    } else {
+      insumos.add(`${base} (${token})`);
+    }
   });
+  return insumos;
+}
+
+// Agrega a la tabla de stock cualquier insumo nuevo que haya aparecido en
+// recetas/patrones y todavía no tenga fila. Se llama automáticamente cada
+// vez que se marca un producto, se escribe un insumo, o se importa un
+// Excel -- no hace falta tocar el botón a mano.
+function sincronizarInsumosAlStock({ silencioso } = {}) {
+  const insumosEnUso = insumosEfectivosActuales();
   const yaEnStock = new Set([...document.querySelectorAll('#tabla-stock [data-field="insumo"]')].map((i) => i.value));
   const tbody = document.querySelector('#tabla-stock tbody');
   let agregados = 0;
   insumosEnUso.forEach((insumo) => {
     if (!yaEnStock.has(insumo)) {
-      tbody.appendChild(filaStock({ insumo, diasElaboracion: 0, tamanoEnvase: 1, stockActual: 0, stockMinimo: 0 }));
+      tbody.appendChild(filaStock({ insumo, diasElaboracion: 0, tamanoEnvase: 1, stockMinimo: 0 }));
       agregados++;
     }
   });
-  document.getElementById('status').textContent = agregados
-    ? `${agregados} insumo(s) agregado(s) al stock, completa las cantidades.`
-    : 'No hay insumos nuevos para agregar.';
-  document.getElementById('status').className = 'status ok';
-  if (agregados) ordenarTablaStock();
-});
+  if (agregados) {
+    ordenarTablaStock();
+    guardarBorradorDebounced();
+  }
+  if (!silencioso) {
+    document.getElementById('status').textContent = agregados
+      ? `${agregados} insumo(s) agregado(s) al stock, completa las cantidades.`
+      : 'No hay insumos nuevos para agregar.';
+    document.getElementById('status').className = 'status ok';
+  }
+  return agregados;
+}
+
+document.getElementById('btn-sync-stock').addEventListener('click', () => sincronizarInsumosAlStock());
 
 document.body.addEventListener('click', (e) => {
   if (e.target.matches('[data-remove]')) e.target.closest('tr').remove();
