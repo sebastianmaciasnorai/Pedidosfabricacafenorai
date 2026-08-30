@@ -3,25 +3,51 @@
 // Responde "¿qué tengo que empezar a fabricar HOY para que esté listo a
 // tiempo?" -- para insumos que se demoran varios días en elaborarse (ej:
 // un brownie que se hace un día y se corta al día siguiente), avisar el
-// mismo día que se agota es tarde. Acá se mira "hoy + días de elaboración"
-// en vez de "hoy".
+// mismo día que se agota es tarde. Acá se mira "cuándo se despacharía si
+// empiezo a producir hoy" en vez de "hoy".
+//
+// CALENDARIO DE DESPACHO (confirmado con el dueño):
+//   - La producción solo avanza en días HÁBILES (lunes a viernes); el fin
+//     de semana no cuenta como día de producción.
+//   - Si un insumo necesita N días de elaboración, se cuentan N días
+//     hábiles a partir de HOY (hoy cuenta como día 1).
+//   - El despacho ocurre el día hábil siguiente a que termine el último
+//     día de producción.
+//   Ejemplos ya validados:
+//     - 2 días de elaboración, empieza viernes -> día 1 viernes, día 2
+//       lunes (se salta el finde), despacho martes.
+//     - 1 día de elaboración, empieza viernes -> día 1 viernes, despacho
+//       lunes.
+//
+// STOCK: ya no se usa un "stockActual" tecleado a mano -- se usa el mismo
+// stock CALCULADO que pedido-fabrica.js (stock-calculado.js), para que
+// ambas pantallas trabajen con el mismo número real.
 //
 // Cómo proyecta la venta de un día FUTURO (no se puede usar la tendencia
 // en vivo, porque ese día todavía no existe): toma el mismo día de la
-// semana (ej: todos los "jueves" guardados en el historial) y promedia
-// cuánto se vendió de cada producto esos días. Si no hay ningún día
-// histórico con ese día de la semana, usa el promedio general del
+// semana del despacho (ej: todos los "martes" guardados en el historial) y
+// promedia cuánto se vendió de cada producto esos días. Si no hay ningún
+// día histórico con ese día de la semana, usa el promedio general del
 // producto en todo el historial.
 //
-// GET /.netlify/functions/pronostico-fabricacion
+// GET /.netlify/functions/pronostico-fabricacion?dias=30
+//   dias -> mínimo de historial a pedirle a Toteat (default 30, se estira
+//           solo si algún insumo tiene un último conteo más antiguo).
 
-const { leerHistorialGuardado } = require('./ventas-cache');
+const { leerHistorialGuardado, obtenerVentasConCache } = require('./ventas-cache');
+const { calcularStockPorInsumo } = require('./stock-calculado');
 const { getStore } = require('@netlify/blobs');
 
 const STORE_NAME = 'pedido-fabrica';
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-exports.handler = async () => {
+exports.handler = async (event) => {
+  const qs = (event && event.queryStringParameters) || {};
+  const { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU } = process.env;
+  if (!TOTEAT_API_TOKEN || !TOTEAT_XIR || !TOTEAT_XIL || !TOTEAT_XIU) {
+    return jsonResponse(500, { ok: false, error: 'Faltan variables de entorno de Toteat en el servidor.' });
+  }
+
   try {
     const store = getStore({
       name: STORE_NAME,
@@ -29,46 +55,76 @@ exports.handler = async () => {
       token: process.env.BLOBS_TOKEN,
     });
 
-    const [recetas, stock] = await Promise.all([
+    const [recetas, stock, mermas, recepciones] = await Promise.all([
       store.get('recetas', { type: 'json' }),
       store.get('stock', { type: 'json' }),
+      store.get('mermas', { type: 'json' }),
+      store.get('recepciones', { type: 'json' }),
     ]);
 
-    const insumosConDiasElaboracion = (stock || []).filter((s) => Number(s.diasElaboracion) > 0);
-    if (!insumosConDiasElaboracion.length) {
+    const stockConDias = (stock || []).filter((s) => Number(s.diasElaboracion) > 0);
+    if (!stockConDias.length) {
       return jsonResponse(200, {
         ok: true,
         items: [],
-        nota: 'Ningún insumo tiene "días de elaboración" configurado todavía. Ve a la pestaña de Recetas y stock y agrégaselo a los insumos que tardan más de un día en fabricarse.',
+        nota: 'Ningún insumo tiene "días de elaboración" configurado todavía. Ve a la pestaña de Recetas y agrégaselo a los insumos que tardan más de un día en fabricarse.',
       });
     }
 
-    const historial = await leerHistorialGuardado();
+    const end = formatYYYYMMDD(new Date());
+    const diasDeseados = Number(qs.dias) || 30;
+    const iniDeseada = sumarDiasYYYYMMDD(end, -(diasDeseados - 1));
+
+    // Igual que pedido-fabrica.js: si algún insumo tiene un último conteo
+    // más antiguo que la ventana pedida, estira el rango para no perder
+    // ventas reales entre medio (si no, el stock calculado quedaría mal).
+    const iniMasAntiguaPorConteo = stockConDias.reduce((min, s) => {
+      const f = (s.ultimoConteoFecha || '').slice(0, 10).replace(/-/g, '');
+      return f && f < min ? f : min;
+    }, iniDeseada);
+    const ini = iniMasAntiguaPorConteo < iniDeseada ? iniMasAntiguaPorConteo : iniDeseada;
+
+    const [resumen, historialParaPromedio] = await Promise.all([
+      obtenerVentasConCache(ini, end, { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU }),
+      leerHistorialGuardado(),
+    ]);
+
+    const stockCalculadoCompleto = calcularStockPorInsumo({
+      recetas: recetas || [],
+      stock: stock || [],
+      mermas: mermas || [],
+      recepciones: recepciones || [],
+      porDia: resumen.porDia,
+    });
+    const insumosConDiasElaboracion = stockCalculadoCompleto.filter((s) => s.diasElaboracion > 0);
+
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
     const items = [];
 
     for (const s of insumosConDiasElaboracion) {
-      const dias = Number(s.diasElaboracion);
-      const tamanoEnvase = s.tamanoEnvase > 0 ? s.tamanoEnvase : 1;
+      const dias = s.diasElaboracion;
+      const tamanoEnvase = s.tamanoEnvase;
 
-      const fechaObjetivo = new Date(hoy);
-      fechaObjetivo.setDate(fechaObjetivo.getDate() + dias);
-      const diaSemanaObjetivo = fechaObjetivo.getDay();
-      const fechaObjetivoISO = fechaObjetivo.toISOString().slice(0, 10);
+      const fechaDespacho = calcularFechaDespacho(hoy, dias);
+      const diaSemanaObjetivo = fechaDespacho.getDay();
+      const fechaObjetivoISO = fechaDespacho.toISOString().slice(0, 10);
 
       const recetasDeEsteInsumo = (recetas || []).filter((r) => r.insumo === s.insumo);
 
       let necesidadProyectada = 0;
       for (const receta of recetasDeEsteInsumo) {
-        const promedio = promedioVentaProducto(historial, receta, diaSemanaObjetivo);
+        // OJO: el historial de referencia para promediar NO incluye hoy
+        // (día parcial todavía) -- leerHistorialGuardado() solo trae días
+        // ya cerrados, por diseño de ventas-cache.js.
+        const promedio = promedioVentaProducto(historialParaPromedio, receta, diaSemanaObjetivo);
         necesidadProyectada += promedio * receta.cantidadPorUnidad;
       }
 
       const necesidadEnvases = necesidadProyectada / tamanoEnvase;
-      const stockActual = s.stockActual || 0;
-      const stockMinimo = s.stockMinimo || 0;
+      const stockActual = s.stockCalculado;
+      const stockMinimo = s.stockMinimo;
       // ¿Alcanza el stock actual para cubrir esa venta futura Y seguir
       // sobre el mínimo? Si no, hay que empezar a producir hoy.
       const faltante = necesidadEnvases - (stockActual - stockMinimo);
@@ -77,8 +133,8 @@ exports.handler = async () => {
       items.push({
         insumo: s.insumo,
         diasElaboracion: dias,
-        fechaObjetivo: fechaObjetivoISO,
-        diaSemanaObjetivo: DIAS_SEMANA[diaSemanaObjetivo],
+        fechaDespacho: fechaObjetivoISO,
+        diaSemanaDespacho: DIAS_SEMANA[diaSemanaObjetivo],
         ventaPromedioProyectada: round2(necesidadProyectada),
         necesidadEnvases: round2(necesidadEnvases),
         stockActual,
@@ -90,13 +146,46 @@ exports.handler = async () => {
 
     items.sort((a, b) => (b.necesitaProducir - a.necesitaProducir) || (b.unidadesAProducir - a.unidadesAProducir));
 
-    return jsonResponse(200, { ok: true, fechaHoy: hoy.toISOString().slice(0, 10), items });
+    return jsonResponse(200, { ok: true, fechaHoy: hoy.toISOString().slice(0, 10), rangeIni: ini, rangeEnd: end, items });
   } catch (e) {
     return jsonResponse(502, { ok: false, error: 'No se pudo calcular el pronóstico de fabricación.', detail: String(e) });
   }
 };
 
-// Promedia cuánto se vendió de "producto" en los días guardados que caen en
+// ============================================================
+// CALENDARIO DE DESPACHO (lunes a viernes, saltando fines de semana)
+// ============================================================
+
+function esFinDeSemana(fecha) {
+  const d = fecha.getDay();
+  return d === 0 || d === 6; // domingo=0, sábado=6
+}
+
+function siguienteDiaHabil(fecha) {
+  const d = new Date(fecha);
+  d.setDate(d.getDate() + 1);
+  while (esFinDeSemana(d)) d.setDate(d.getDate() + 1);
+  return d;
+}
+
+// Si HOY se empieza a producir un insumo que necesita "diasElaboracion"
+// días hábiles, calcula en qué fecha se despacha (día hábil siguiente al
+// último día de producción).
+function calcularFechaDespacho(fechaInicio, diasElaboracion) {
+  let cursor = new Date(fechaInicio);
+  while (esFinDeSemana(cursor)) cursor = siguienteDiaHabil(cursor); // por si "hoy" cae en finde
+
+  for (let i = 1; i < diasElaboracion; i++) {
+    cursor = siguienteDiaHabil(cursor);
+  }
+  return siguienteDiaHabil(cursor);
+}
+
+// ============================================================
+// PROMEDIO HISTÓRICO POR DÍA DE LA SEMANA
+// ============================================================
+
+// Promedia cuánto se vendió de la receta en los días guardados que caen en
 // el mismo día de la semana (0=domingo...6=sábado). Si no hay ninguno,
 // promedia con TODOS los días guardados (mejor una estimación gruesa que
 // nada).
@@ -127,7 +216,7 @@ function promedioVentaProducto(historial, receta, diaSemanaObjetivo) {
 
 // Cuánto se vendió de la receta en ESE día -- nombre exacto, o suma de
 // todos los productos que empiecen con la base y contengan el sabor
-// (patronToken), igual que en pedido-fabrica.js.
+// (patronToken), igual que en pedido-fabrica.js / stock-calculado.js.
 function cantidadDelDia(dia, receta) {
   if (!receta.patronToken) {
     const p = (dia.products || []).find((x) => x.name === receta.producto);
@@ -136,6 +225,26 @@ function cantidadDelDia(dia, receta) {
   return (dia.products || [])
     .filter((p) => p.name.startsWith(receta.producto) && p.name.includes(receta.patronToken))
     .reduce((s, p) => s + p.quantity, 0);
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function sumarDiasYYYYMMDD(yyyymmdd, dias) {
+  const d = new Date(Number(yyyymmdd.slice(0, 4)), Number(yyyymmdd.slice(4, 6)) - 1, Number(yyyymmdd.slice(6, 8)));
+  d.setDate(d.getDate() + dias);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${day}`;
+}
+
+function formatYYYYMMDD(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${day}`;
 }
 
 function round2(n) {
