@@ -158,10 +158,11 @@
   .merma-form input[type="text"]{flex:1;min-width:140px;}
   .merma-form input{border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-family:"JetBrains Mono",monospace;font-size:12.5px;background:#fff;}
   .merma-form input[type="number"]{width:100px;}
+  .calendario-caja{max-width:340px;border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel);}
   .calendario-header{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px;font-weight:700;font-size:14px;}
   .calendario-header button{border:1px solid var(--line);background:var(--panel);border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer;}
-  .calendario-dias-semana{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:var(--ink-soft);margin-bottom:4px;}
-  .calendario-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .calendario-dias-semana{display:grid;grid-template-columns:repeat(7,40px);gap:4px;text-align:center;font-size:11px;color:var(--ink-soft);margin-bottom:4px;}
+  .calendario-grid{display:grid;grid-template-columns:repeat(7,40px);gap:4px;}
   .calendario-dia{
     aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
     border-radius:8px;font-size:13px;color:var(--ink-soft);position:relative;
@@ -200,7 +201,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.2</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.3</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -337,15 +338,17 @@
     <button type="button" class="add" id="btn-toggle-calendario">📅 Calendario de mermas</button>
     <div id="calendario-panel" style="display:none;margin-top:12px;">
       <p class="hint">Los días con mermas aparecen marcados. Toca un día para ver el resumen de ese día; toca un segundo día para sumar todo el rango entre ambos.</p>
-      <div class="calendario-header">
-        <button type="button" class="chico" id="btn-mes-anterior">‹</button>
-        <span id="calendario-mes-titulo"></span>
-        <button type="button" class="chico" id="btn-mes-siguiente">›</button>
+      <div class="calendario-caja">
+        <div class="calendario-header">
+          <button type="button" class="chico" id="btn-mes-anterior">‹</button>
+          <span id="calendario-mes-titulo"></span>
+          <button type="button" class="chico" id="btn-mes-siguiente">›</button>
+        </div>
+        <div class="calendario-dias-semana">
+          <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+        </div>
+        <div class="calendario-grid" id="calendario-grid"></div>
       </div>
-      <div class="calendario-dias-semana">
-        <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
-      </div>
-      <div class="calendario-grid" id="calendario-grid"></div>
       <div id="calendario-resumen" style="margin-top:16px;"></div>
     </div>
   </section>
