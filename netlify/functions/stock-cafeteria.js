@@ -93,7 +93,7 @@ exports.handler = async (event) => {
         .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
         .map((m) => ({ ...m, nombreVisible: nombreVisibleMerma(m) }));
 
-      return jsonResponse(200, { ok: true, items, mermasHoy });
+      return jsonResponse(200, { ok: true, items, mermasHoy, mermas: (mermas || []).map((m) => ({ ...m, nombreVisible: nombreVisibleMerma(m) })) });
     } catch (e) {
       return jsonResponse(502, { ok: false, error: 'No se pudo calcular el stock.', detail: String(e) });
     }
