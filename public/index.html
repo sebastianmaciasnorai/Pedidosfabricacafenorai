@@ -20,12 +20,14 @@
   }
   h1{font-size:20px;letter-spacing:-0.01em;margin:0 0 12px;}
 
-  .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line);}
+  .tabs{display:flex;gap:2px;margin-bottom:20px;border-bottom:2px solid var(--line);overflow-x:auto;}
   .tab-btn{
-    border:none;background:none;padding:10px 4px;font-size:14px;font-weight:600;
-    color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-right:16px;
+    border:none;background:none;padding:12px 18px;font-size:16px;font-weight:600;
+    color:var(--ink-soft);cursor:pointer;border-bottom:3px solid transparent;
+    white-space:nowrap;letter-spacing:-0.01em;transition:color .15s;
   }
-  .tab-btn.activo{color:var(--accent);border-bottom-color:var(--accent);}
+  .tab-btn:hover{color:var(--ink);}
+  .tab-btn.activo{color:var(--accent);border-bottom-color:var(--accent);font-weight:800;}
 
   .tab-panel{display:none;padding-top:4px;}
   .tab-panel.activo{display:block;}
@@ -201,18 +203,18 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.3</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.6</span></h1>
   <div class="tabs">
-    <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
+    <button class="tab-btn" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
     <button class="tab-btn" data-tab="stock">Stock</button>
-    <button class="tab-btn" data-tab="mermas">Mermas</button>
+    <button class="tab-btn activo" data-tab="mermas">Mermas</button>
     <button class="tab-btn" data-tab="admin">Recetas</button>
   </div>
 </header>
 
 <!-- ================= TAB: PEDIDO ================= -->
-<div class="tab-panel activo" id="tab-pedido">
+<div class="tab-panel" id="tab-pedido">
   <p class="sub">Proyección de venta de hoy, explotada a insumos, comparada contra tu stock.</p>
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
     <button class="add" id="btn-actualizar-toteat">🔄 Actualizar con Toteat (en vivo)</button>
@@ -291,7 +293,7 @@
 </div>
 
 <!-- ================= TAB: MERMAS ================= -->
-<div class="tab-panel" id="tab-mermas">
+<div class="tab-panel activo" id="tab-mermas">
   <p class="sub">Busca el producto (por nombre o escaneando el código de barras) y anota cuánto se mermó. Queda guardado con fecha y hora, y se descuenta del stock automáticamente.</p>
   <div id="loading-mermas">Cargando...</div>
 
@@ -409,6 +411,52 @@ let adminCargado = false;
 let fabricarCargado = false;
 let stockCargado = false;
 let mermasCargado = false;
+let pedidoCargado = false;
+
+// ===================== CACHE EN LA NUBE (compartido entre dispositivos) =====================
+// Muestra de inmediato lo último guardado en Blobs (sin esperar a Toteat)
+// y, apenas llega la respuesta en vivo, refresca la pantalla y guarda el
+// cache nuevo para la próxima vez -- en cualquier dispositivo, no solo
+// este. Si nunca hubo cache (primera vez que se usa la app), sí espera la
+// carga en vivo antes de mostrar algo.
+//
+//   tab: namespace del cache (ej: 'mermas')
+//   cargarDatosFrescos: async () => datos crudos desde los endpoints reales
+//   aplicarDatos: (datos, esCache) => pinta la pantalla con esos datos
+//   mostrarCargando / ocultarCargando: opcional, para el estado inicial
+async function cargarConCache({ tab, cargarDatosFrescos, aplicarDatos, mostrarCargando, ocultarCargando, mostrarError }) {
+  let huboCache = false;
+  try {
+    const resCache = await fetch(`/.netlify/functions/cache-datos?tab=${tab}`);
+    const jsonCache = await resCache.json();
+    if (jsonCache.ok && jsonCache.datos) {
+      aplicarDatos(jsonCache.datos, true);
+      huboCache = true;
+      if (ocultarCargando) ocultarCargando();
+    }
+  } catch (e) {
+    // sin cache disponible -- sigue con la carga en vivo normal
+  }
+
+  if (!huboCache && mostrarCargando) mostrarCargando();
+
+  try {
+    const datosFrescos = await cargarDatosFrescos();
+    if (ocultarCargando) ocultarCargando();
+    aplicarDatos(datosFrescos, false);
+    // guarda el cache nuevo en la nube para la próxima vez, en cualquier
+    // dispositivo -- no bloquea la pantalla si falla (fire and forget)
+    fetch('/.netlify/functions/cache-datos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tab, datos: datosFrescos }),
+    }).catch(() => {});
+  } catch (e) {
+    if (!huboCache && mostrarError) mostrarError(e);
+    // si ya había cache mostrado, el refresco falló en silencio -- se deja
+    // lo último guardado en pantalla en vez de tapar todo con un error
+  }
+}
 
 tabButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -420,6 +468,10 @@ tabButtons.forEach((btn) => {
     const esAdmin = btn.dataset.tab === 'admin';
     document.getElementById('barra-guardar').classList.toggle('visible', esAdmin);
 
+    if (btn.dataset.tab === 'pedido' && !pedidoCargado) {
+      pedidoCargado = true;
+      window.cargarPedidoHoy();
+    }
     if (esAdmin && !adminCargado) {
       adminCargado = true;
       cargarAdmin();
@@ -439,6 +491,12 @@ tabButtons.forEach((btn) => {
   });
 });
 
+// "Mermas" es la pestaña activa por defecto (ver HTML) -- dispara su carga
+// inicial ya que no hay click que lo haga.
+mermasCargado = true;
+window.addEventListener('DOMContentLoaded', cargarMermas);
+if (document.readyState !== 'loading') cargarMermas();
+
 // ===================== PEDIDO DE HOY =====================
 (function () {
   const FN = '/.netlify/functions/pedido-fabrica';
@@ -449,109 +507,115 @@ tabButtons.forEach((btn) => {
     return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   }
 
-  async function cargar() {
+  function aplicarDatosPedido(json) {
     const loading = document.getElementById('loading-pedido');
-    // limpia estado previo (para que "Actualizar" no vaya acumulando banners viejos)
     document.getElementById('banner-alerta').classList.remove('visible');
     document.getElementById('banner-ok').classList.remove('visible');
     document.getElementById('seccion-detalle').style.display = 'none';
-    loading.style.display = 'block';
-    loading.textContent = 'Calculando...';
 
-    try {
-      const res = await fetch(FN);
-      const json = await res.json();
-      loading.style.display = 'none';
-
-      if (!json.ok) {
-        loading.style.display = 'block';
-        loading.textContent = 'Error: ' + (json.error || 'desconocido');
-        return;
-      }
-
-      // Línea de estado, al estilo del dashboard de ventas: cuándo se
-      // consultó Toteat y hasta qué boleta llegó la información.
-      let textoFecha = `Datos al ${horaActualCorta()} hrs · Proyectando ${json.fechaProyectada || ''}`;
-      if (json.checkpoint) {
-        try {
-          const cp = json.checkpoint;
-          const horaUltimaBoleta = cp.ultimaHoraConVentas != null ? `${String(cp.ultimaHoraConVentas).padStart(2, '0')}:00 hrs` : 'sin boletas registradas';
-          let horaSinc = '—';
-          if (cp.ultimaSincronizacion) {
-            const d = new Date(cp.ultimaSincronizacion);
-            if (!isNaN(d.getTime())) {
-              horaSinc = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-            }
+    // Línea de estado, al estilo del dashboard de ventas: cuándo se
+    // consultó Toteat y hasta qué boleta llegó la información.
+    let textoFecha = `Datos al ${horaActualCorta()} hrs · Proyectando ${json.fechaProyectada || ''}`;
+    if (json.checkpoint) {
+      try {
+        const cp = json.checkpoint;
+        const horaUltimaBoleta = cp.ultimaHoraConVentas != null ? `${String(cp.ultimaHoraConVentas).padStart(2, '0')}:00 hrs` : 'sin boletas registradas';
+        let horaSinc = '—';
+        if (cp.ultimaSincronizacion) {
+          const d = new Date(cp.ultimaSincronizacion);
+          if (!isNaN(d.getTime())) {
+            horaSinc = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
           }
-          textoFecha += `\nÚltima sincronización con Toteat: ${horaSinc} hrs · Última boleta vista: ${horaUltimaBoleta} (${cp.fechaHoy || ''}) · ${cp.ordenesHoy ?? '—'} boletas hoy`;
-        } catch (e) {
-          // si algo falla formateando el checkpoint, no rompe el resto de la pantalla
         }
+        textoFecha += `\nÚltima sincronización con Toteat: ${horaSinc} hrs · Última boleta vista: ${horaUltimaBoleta} (${cp.fechaHoy || ''}) · ${cp.ordenesHoy ?? '—'} boletas hoy`;
+      } catch (e) {
+        // si algo falla formateando el checkpoint, no rompe el resto de la pantalla
       }
-      textoFecha += `\nHistorial usado: ${json.rangeIni || ''}–${json.rangeEnd || ''}`;
-      document.getElementById('fecha').textContent = textoFecha;
-      document.getElementById('fecha').style.whiteSpace = 'pre-line';
-
-      if (json.nota) {
-        loading.style.display = 'block';
-        loading.textContent = json.nota;
-        return;
-      }
-
-      const detalle = json.detalle || [];
-      const alertas = json.alertas || [];
-
-      if (alertas.length) {
-        const banner = document.getElementById('banner-alerta');
-        banner.classList.add('visible');
-        banner.textContent = `⚠ ${alertas.length} insumo(s) van a quedar bajo el mínimo hoy: ` + alertas.map((a) => a.insumo).join(', ');
-      } else {
-        document.getElementById('banner-ok').classList.add('visible');
-      }
-
-      if (detalle.length) {
-        document.getElementById('seccion-detalle').style.display = 'block';
-        const tbody = document.getElementById('tbody-detalle');
-        tbody.innerHTML = '';
-        detalle.forEach((d) => {
-          const tr = document.createElement('tr');
-          if (d.bajoMinimo) tr.classList.add('bajo-minimo');
-          const estado = calcularEstadoSemaforo(d);
-          tr.innerHTML = `
-            <td class="nombre">${d.insumo}${d.tamanoEnvase > 1 ? ` <span style="color:var(--ink-soft);font-size:11px;">(envase = ${d.tamanoEnvase})</span>` : ''}</td>
-            <td class="num">${d.necesidadHoyUnidadReceta}</td>
-            <td class="num">${d.necesidadHoyEnvases}</td>
-            <td class="num">${d.stockActual}</td>
-            <td class="num">${d.stockProyectadoFinDia}</td>
-            <td class="num">${d.stockMinimo}</td>
-            <td class="num">${d.sugeridoPedirAFabrica > 0
-              ? `<span class="pill pedir">${d.sugeridoPedirAFabrica}</span>`
-              : `<span class="pill ok">—</span>`}</td>
-            <td class="num">${estado.emoji} ${estado.texto}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-      }
-
-      // "¿Llegó el pedido de fábrica hoy?" -- solo los insumos que
-      // efectivamente se sugirió pedir, precargados con esa cantidad.
-      const paraRecibir = detalle.filter((d) => d.sugeridoPedirAFabrica > 0);
-      const seccionRecepcion = document.getElementById('seccion-recepcion');
-      if (paraRecibir.length) {
-        seccionRecepcion.style.display = 'block';
-        document.getElementById('tbody-recepcion').innerHTML = paraRecibir.map((d) => `
-          <tr>
-            <td class="nombre">${d.insumo}</td>
-            <td class="num">${d.sugeridoPedirAFabrica} ${d.tamanoEnvase > 1 ? '(envases)' : ''}</td>
-            <td class="num"><input type="number" step="0.1" data-insumo="${escapeAttr(d.insumo)}" value="${d.sugeridoPedirAFabrica}"></td>
-          </tr>`).join('');
-      } else {
-        seccionRecepcion.style.display = 'none';
-      }
-    } catch (e) {
-      loading.style.display = 'block';
-      loading.textContent = 'Error de conexión: ' + e.message;
     }
+    textoFecha += `\nHistorial usado: ${json.rangeIni || ''}–${json.rangeEnd || ''}`;
+    document.getElementById('fecha').textContent = textoFecha;
+    document.getElementById('fecha').style.whiteSpace = 'pre-line';
+
+    if (json.nota) {
+      loading.style.display = 'block';
+      loading.textContent = json.nota;
+      return;
+    }
+    loading.style.display = 'none';
+
+    const detalle = json.detalle || [];
+    const alertas = json.alertas || [];
+
+    if (alertas.length) {
+      const banner = document.getElementById('banner-alerta');
+      banner.classList.add('visible');
+      banner.textContent = `⚠ ${alertas.length} insumo(s) van a quedar bajo el mínimo hoy: ` + alertas.map((a) => a.insumo).join(', ');
+    } else {
+      document.getElementById('banner-ok').classList.add('visible');
+    }
+
+    if (detalle.length) {
+      document.getElementById('seccion-detalle').style.display = 'block';
+      const tbody = document.getElementById('tbody-detalle');
+      tbody.innerHTML = '';
+      detalle.forEach((d) => {
+        const tr = document.createElement('tr');
+        if (d.bajoMinimo) tr.classList.add('bajo-minimo');
+        const estado = calcularEstadoSemaforo(d);
+        tr.innerHTML = `
+          <td class="nombre">${d.insumo}${d.tamanoEnvase > 1 ? ` <span style="color:var(--ink-soft);font-size:11px;">(envase = ${d.tamanoEnvase})</span>` : ''}</td>
+          <td class="num">${d.necesidadHoyUnidadReceta}</td>
+          <td class="num">${d.necesidadHoyEnvases}</td>
+          <td class="num">${d.stockActual}</td>
+          <td class="num">${d.stockProyectadoFinDia}</td>
+          <td class="num">${d.stockMinimo}</td>
+          <td class="num">${d.sugeridoPedirAFabrica > 0
+            ? `<span class="pill pedir">${d.sugeridoPedirAFabrica}</span>`
+            : `<span class="pill ok">—</span>`}</td>
+          <td class="num">${estado.emoji} ${estado.texto}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // "¿Llegó el pedido de fábrica hoy?" -- solo los insumos que
+    // efectivamente se sugirió pedir, precargados con esa cantidad.
+    const paraRecibir = detalle.filter((d) => d.sugeridoPedirAFabrica > 0);
+    const seccionRecepcion = document.getElementById('seccion-recepcion');
+    if (paraRecibir.length) {
+      seccionRecepcion.style.display = 'block';
+      document.getElementById('tbody-recepcion').innerHTML = paraRecibir.map((d) => `
+        <tr>
+          <td class="nombre">${d.insumo}</td>
+          <td class="num">${d.sugeridoPedirAFabrica} ${d.tamanoEnvase > 1 ? '(envases)' : ''}</td>
+          <td class="num"><input type="number" step="0.1" data-insumo="${escapeAttr(d.insumo)}" value="${d.sugeridoPedirAFabrica}"></td>
+        </tr>`).join('');
+    } else {
+      seccionRecepcion.style.display = 'none';
+    }
+  }
+
+  async function cargar() {
+    await cargarConCache({
+      tab: 'pedido',
+      cargarDatosFrescos: async () => {
+        const res = await fetch(FN);
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.error || 'desconocido');
+        return json;
+      },
+      aplicarDatos: aplicarDatosPedido,
+      mostrarCargando: () => {
+        const loading = document.getElementById('loading-pedido');
+        loading.style.display = 'block';
+        loading.textContent = 'Calculando...';
+      },
+      mostrarError: (e) => {
+        const loading = document.getElementById('loading-pedido');
+        loading.style.display = 'block';
+        loading.textContent = 'Error de conexión: ' + e.message;
+      },
+    });
   }
 
   btnActualizar.addEventListener('click', async () => {
@@ -593,7 +657,7 @@ tabButtons.forEach((btn) => {
     }
   });
 
-  cargar();
+  window.cargarPedidoHoy = cargar;
 
   // Semáforo visual: rojo = ya se va a quedar en 0 o negativo hoy;
   // amarillo = queda bajo el mínimo pero todavía no en cero; verde = stock
@@ -611,53 +675,63 @@ tabButtons.forEach((btn) => {
 })();
 
 // ===================== POR EMPEZAR A FABRICAR =====================
-async function cargarFabricar() {
+function aplicarDatosFabricar(json) {
   const loading = document.getElementById('loading-fabricar');
-  try {
-    const res = await fetch('/.netlify/functions/pronostico-fabricacion');
-    const json = await res.json();
-    loading.style.display = 'none';
-
-    if (!json.ok) {
-      loading.style.display = 'block';
-      loading.textContent = 'Error: ' + (json.error || 'desconocido');
-      return;
-    }
-    if (json.nota) {
-      loading.style.display = 'block';
-      loading.textContent = json.nota;
-      return;
-    }
-
-    const items = json.items || [];
-    if (!items.length) {
-      loading.style.display = 'block';
-      loading.textContent = 'No hay insumos con días de elaboración configurados.';
-      return;
-    }
-
-    document.getElementById('seccion-fabricar').style.display = 'block';
-    const tbody = document.getElementById('tbody-fabricar');
-    tbody.innerHTML = '';
-    items.forEach((it) => {
-      const tr = document.createElement('tr');
-      if (it.necesitaProducir) tr.classList.add('bajo-minimo');
-      tr.innerHTML = `
-        <td class="nombre">${it.insumo}</td>
-        <td class="num">${it.diaSemanaDespacho} ${it.fechaDespacho} <span style="color:var(--ink-soft);">(${it.diasElaboracion}d hábiles)</span></td>
-        <td class="num">${it.ventaPromedioProyectada}</td>
-        <td class="num">${it.stockActual}</td>
-        <td class="num">${it.stockMinimo}</td>
-        <td class="num">${it.necesitaProducir
-          ? `<span class="pill pedir">${it.unidadesAProducir}</span>`
-          : `<span class="pill ok">—</span>`}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  } catch (e) {
+  if (json.nota) {
     loading.style.display = 'block';
-    loading.textContent = 'Error de conexión: ' + e.message;
+    loading.textContent = json.nota;
+    return;
   }
+
+  const items = json.items || [];
+  if (!items.length) {
+    loading.style.display = 'block';
+    loading.textContent = 'No hay insumos con días de elaboración configurados.';
+    return;
+  }
+  loading.style.display = 'none';
+
+  document.getElementById('seccion-fabricar').style.display = 'block';
+  const tbody = document.getElementById('tbody-fabricar');
+  tbody.innerHTML = '';
+  items.forEach((it) => {
+    const tr = document.createElement('tr');
+    if (it.necesitaProducir) tr.classList.add('bajo-minimo');
+    tr.innerHTML = `
+      <td class="nombre">${it.insumo}</td>
+      <td class="num">${it.diaSemanaDespacho} ${it.fechaDespacho} <span style="color:var(--ink-soft);">(${it.diasElaboracion}d hábiles)</span></td>
+      <td class="num">${it.ventaPromedioProyectada}</td>
+      <td class="num">${it.stockActual}</td>
+      <td class="num">${it.stockMinimo}</td>
+      <td class="num">${it.necesitaProducir
+        ? `<span class="pill pedir">${it.unidadesAProducir}</span>`
+        : `<span class="pill ok">—</span>`}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function cargarFabricar() {
+  await cargarConCache({
+    tab: 'fabricar',
+    cargarDatosFrescos: async () => {
+      const res = await fetch('/.netlify/functions/pronostico-fabricacion');
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'desconocido');
+      return json;
+    },
+    aplicarDatos: aplicarDatosFabricar,
+    mostrarCargando: () => {
+      const loading = document.getElementById('loading-fabricar');
+      loading.style.display = 'block';
+      loading.textContent = 'Calculando...';
+    },
+    mostrarError: (e) => {
+      const loading = document.getElementById('loading-fabricar');
+      loading.style.display = 'block';
+      loading.textContent = 'Error de conexión: ' + e.message;
+    },
+  });
 }
 
 // ===================== STOCK Y MERMAS =====================
@@ -685,58 +759,102 @@ async function obtenerDatosStockCafeteria() {
   return json;
 }
 
-async function cargarStock() {
+function aplicarDatosStock(datos) {
   const loading = document.getElementById('loading-stock');
-  loading.style.display = 'block';
-  loading.textContent = 'Calculando...';
-  try {
-    const json = await obtenerDatosStockCafeteria();
-    loading.style.display = 'none';
-    if (json.nota) {
-      loading.style.display = 'block';
-      loading.textContent = json.nota;
-      return;
-    }
-    document.getElementById('seccion-stock-calculado').style.display = 'block';
-    renderStockCalculado();
-  } catch (e) {
+  if (datos.nota) {
     loading.style.display = 'block';
-    loading.textContent = 'Error de conexión: ' + e.message;
+    loading.textContent = datos.nota;
+    return;
   }
+  loading.style.display = 'none';
+  stockData = datos.stockData || [];
+  document.getElementById('seccion-stock-calculado').style.display = 'block';
+  renderStockCalculado();
+}
+
+async function cargarStock() {
+  await cargarConCache({
+    tab: 'stock',
+    cargarDatosFrescos: async () => {
+      const json = await obtenerDatosStockCafeteria(); // deja stockData actualizado como side-effect
+      return { nota: json.nota, stockData };
+    },
+    aplicarDatos: aplicarDatosStock,
+    mostrarCargando: () => {
+      const loading = document.getElementById('loading-stock');
+      loading.style.display = 'block';
+      loading.textContent = 'Calculando...';
+    },
+    mostrarError: (e) => {
+      const loading = document.getElementById('loading-stock');
+      loading.style.display = 'block';
+      loading.textContent = 'Error de conexión: ' + e.message;
+    },
+  });
 }
 
 let itemsParaMerma = []; // insumos + productos + sabores, todo lo que se puede mermar
 let mermasCompletas = []; // historial completo (todas las fechas), para el calendario y el Excel
 
-async function cargarMermas() {
+function aplicarDatosMermas(datos) {
   const loading = document.getElementById('loading-mermas');
-  loading.style.display = 'block';
-  loading.textContent = 'Cargando...';
-  try {
-    const [json, resProductos, resCatalogo] = await Promise.all([
-      obtenerDatosStockCafeteria(),
-      fetch('/.netlify/functions/productos-toteat').then((r) => r.json()),
-      fetch('/.netlify/functions/productos-catalogo').then((r) => r.json()),
-    ]);
-    loading.style.display = 'none';
-    if (json.nota) {
-      loading.style.display = 'block';
-      loading.textContent = json.nota;
-      return;
-    }
-
-    itemsParaMerma = armarItemsParaMerma(resProductos, resCatalogo);
-    mermasCompletas = json.mermas || [];
-
-    document.getElementById('seccion-mermas').style.display = 'block';
-    renderLogMermas(json.mermasHoy || []);
-    document.getElementById('merma-buscador').focus();
-
-    document.getElementById('seccion-calendario-mermas').style.display = 'block';
-  } catch (e) {
+  if (datos.nota) {
     loading.style.display = 'block';
-    loading.textContent = 'Error de conexión: ' + e.message;
+    loading.textContent = datos.nota;
+    return;
   }
+  loading.style.display = 'none';
+
+  stockData = datos.stockData || [];
+  itemsParaMerma = datos.itemsParaMerma || [];
+  mermasCompletas = datos.mermasCompletas || [];
+  categoriaPorClaveMerma = new Map(datos.categoriaPorClaveMerma || []);
+
+  document.getElementById('seccion-mermas').style.display = 'block';
+  document.getElementById('seccion-calendario-mermas').style.display = 'block';
+  renderLogMermas(datos.mermasHoy || []);
+
+  // Si el calendario ya estaba abierto (dato viejo en pantalla), lo vuelve
+  // a pintar con los datos frescos.
+  if (document.getElementById('calendario-panel').style.display !== 'none') {
+    renderCalendarioMermas();
+  }
+}
+
+async function cargarMermas() {
+  await cargarConCache({
+    tab: 'mermas',
+    cargarDatosFrescos: async () => {
+      const [json, resProductos, resCatalogo] = await Promise.all([
+        obtenerDatosStockCafeteria(),
+        fetch('/.netlify/functions/productos-toteat').then((r) => r.json()),
+        fetch('/.netlify/functions/productos-catalogo').then((r) => r.json()),
+      ]);
+      if (json.nota) return { nota: json.nota };
+
+      itemsParaMerma = armarItemsParaMerma(resProductos, resCatalogo);
+      mermasCompletas = json.mermas || [];
+
+      return {
+        stockData,
+        itemsParaMerma,
+        mermasCompletas,
+        categoriaPorClaveMerma: [...categoriaPorClaveMerma.entries()],
+        mermasHoy: json.mermasHoy || [],
+      };
+    },
+    aplicarDatos: aplicarDatosMermas,
+    mostrarCargando: () => {
+      const loading = document.getElementById('loading-mermas');
+      loading.style.display = 'block';
+      loading.textContent = 'Cargando...';
+    },
+    mostrarError: (e) => {
+      const loading = document.getElementById('loading-mermas');
+      loading.style.display = 'block';
+      loading.textContent = 'Error de conexión: ' + e.message;
+    },
+  });
 }
 
 // Junta en una sola lista buscable: insumos de fábrica (mermas directas) +
@@ -919,11 +1037,20 @@ function diasConMermas() {
   return new Set(mermasCompletas.map((m) => (m.fecha || '').slice(0, 10)));
 }
 
-document.getElementById('btn-toggle-calendario').addEventListener('click', () => {
+document.getElementById('btn-toggle-calendario').addEventListener('click', (e) => {
+  e.stopPropagation();
   const panel = document.getElementById('calendario-panel');
   const abrir = panel.style.display === 'none';
   panel.style.display = abrir ? 'block' : 'none';
   if (abrir) renderCalendarioMermas();
+});
+
+// Cierra el calendario si se toca fuera de él (y fuera del botón que lo abre).
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('calendario-panel');
+  if (panel.style.display !== 'none' && !e.target.closest('#calendario-panel') && !e.target.closest('#btn-toggle-calendario')) {
+    panel.style.display = 'none';
+  }
 });
 
 function renderCalendarioMermas() {
@@ -1219,7 +1346,25 @@ document.getElementById('btn-guardar-merma').addEventListener('click', async () 
     statusEl.textContent = `Merma registrada: ${cantidad} de "${item.nombre}".`;
     statusEl.className = 'status ok';
     const jsonActualizado = await obtenerDatosStockCafeteria();
+    mermasCompletas = jsonActualizado.mermas || mermasCompletas;
     renderLogMermas(jsonActualizado.mermasHoy || []);
+    if (document.getElementById('calendario-panel').style.display !== 'none') {
+      renderCalendarioMermas();
+    }
+    fetch('/.netlify/functions/cache-datos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tab: 'mermas',
+        datos: {
+          stockData,
+          itemsParaMerma,
+          mermasCompletas,
+          categoriaPorClaveMerma: [...categoriaPorClaveMerma.entries()],
+          mermasHoy: jsonActualizado.mermasHoy || [],
+        },
+      }),
+    }).catch(() => {});
     volverABuscarMerma();
   } catch (e) {
     statusEl.textContent = 'Error: ' + e.message;
