@@ -170,7 +170,7 @@ async function obtenerVentasEnVivo(iniYYYYMMDD, endYYYYMMDD, creds) {
       byCategory.set(c.name, e);
     });
     dia.products.forEach((p) => {
-      const e = byProduct.get(p.name) || { revenue: 0, quantity: 0, category: p.category };
+      const e = byProduct.get(p.name) || { revenue: 0, quantity: 0, category: p.category, codigo: p.codigo, variantes: p.variantes };
       e.revenue += p.revenue; e.quantity += p.quantity;
       byProduct.set(p.name, e);
     });
@@ -185,7 +185,7 @@ async function obtenerVentasEnVivo(iniYYYYMMDD, endYYYYMMDD, creds) {
     .map(([name, v]) => ({ name, revenue: round2(v.revenue), quantity: v.quantity, pct: totalRevenue > 0 ? round2((v.revenue / totalRevenue) * 100) : 0 }))
     .sort((a, b) => b.revenue - a.revenue);
   const products = [...byProduct.entries()]
-    .map(([name, v]) => ({ name, revenue: round2(v.revenue), quantity: v.quantity, category: v.category }))
+    .map(([name, v]) => ({ name, revenue: round2(v.revenue), quantity: v.quantity, category: v.category, codigo: v.codigo, variantes: v.variantes }))
     .sort((a, b) => b.revenue - a.revenue);
   const hourly = [...byHourGlobal.entries()]
     .map(([hour, v]) => ({ hour, revenue: round2(v.revenue), orders: v.orders }))
@@ -240,7 +240,7 @@ function resumirDia(fechaYYYYMMDD, rawSalesAll) {
       byCategory.set(catName, cat);
 
       const prodKey = p.name || '(sin nombre)';
-      const prod = byProduct.get(prodKey) || { revenue: 0, quantity: 0, category: catName };
+      const prod = byProduct.get(prodKey) || { revenue: 0, quantity: 0, category: catName, codigo: p.codigo || null, variantes: p.variantes || [] };
       prod.revenue += Number(p.payed) || 0; prod.quantity += Number(p.quantity) || 0;
       byProduct.set(prodKey, prod);
 
@@ -256,7 +256,7 @@ function resumirDia(fechaYYYYMMDD, rawSalesAll) {
     .map(([name, v]) => ({ name, revenue: round2(v.revenue), quantity: v.quantity }))
     .sort((a, b) => b.revenue - a.revenue);
   const products = [...byProduct.entries()]
-    .map(([name, v]) => ({ name, revenue: round2(v.revenue), quantity: v.quantity, category: v.category }))
+    .map(([name, v]) => ({ name, revenue: round2(v.revenue), quantity: v.quantity, category: v.category, codigo: v.codigo, variantes: v.variantes }))
     .sort((a, b) => b.revenue - a.revenue);
   const hourly = [...byHour.entries()]
     .map(([hour, v]) => ({ hour, revenue: round2(v.revenue), orders: v.orders }))
@@ -462,12 +462,17 @@ function mergeModifiers(rawProducts) {
       const modText = arreglarAcentos(String(p.name || '').trim());
       if (idxPadre != null && modText) {
         merged[idxPadre].name = merged[idxPadre].name + ' (' + modText + ')';
+        merged[idxPadre].variantes.push({ nombre: modText, codigo: p.id != null ? String(p.id) : null });
       }
       continue;
     }
 
     const rawName = arreglarAcentos(String(p.name || '').trim());
-    merged.push(Object.assign({}, p, { name: rawName }));
+    merged.push(Object.assign({}, p, {
+      name: rawName,
+      codigo: p.id != null ? String(p.id) : null,
+      variantes: [],
+    }));
     if (p.lineId != null) indexPorLineId.set(p.lineId, merged.length - 1);
   }
   return merged;

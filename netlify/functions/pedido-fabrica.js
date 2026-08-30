@@ -59,7 +59,7 @@
 const { getStore } = require('@netlify/blobs');
 const { calcularTendenciaCierrePorProducto } = require('./ventas-fabrica');
 const { obtenerVentasConCache } = require('./ventas-cache');
-const { calcularStockPorInsumo, explotarARecetas } = require('./stock-calculado');
+const { calcularStockPorInsumo, explotarARecetas, mapaProductosPorNombre } = require('./stock-calculado');
 
 const STORE_NAME = 'pedido-fabrica';
 
@@ -115,7 +115,7 @@ exports.handler = async (event) => {
     const restantePorProducto = new Map(
       tendenciaProductos.map((t) => [t.producto, Math.max(0, t.unidadesProyectadasCierre - t.unidadesVendidasHastaAhora)])
     );
-    const necesidadRestantePorInsumo = explotarARecetas(recetas, restantePorProducto);
+    const necesidadRestantePorInsumo = explotarARecetas(recetas, restantePorProducto, mapaProductosPorNombre(resumen.porDia));
 
     const stockCalculado = calcularStockPorInsumo({ recetas, stock: stock || [], mermas: mermas || [], recepciones: recepciones || [], porDia: resumen.porDia });
     const stockPorInsumo = new Map(stockCalculado.map((s) => [s.insumo, s]));

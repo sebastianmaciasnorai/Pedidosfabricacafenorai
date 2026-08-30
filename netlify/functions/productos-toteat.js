@@ -4,7 +4,14 @@
 // 7), agrupados por categoría -- exactamente como están ordenados en
 // Toteat -- junto con cuántas unidades se vendieron de cada uno. Esto es
 // lo que alimenta el selector de "qué producto usa insumo de fábrica" en
-// /admin-fabrica.html, para no tener que escribir nombres a mano.
+// la pestaña "Recetas", para no tener que escribir nombres a mano.
+//
+// CÓDIGO (nuevo): cada producto trae su "codigo" (el id interno de Toteat,
+// ej: "TT001") y, si tiene sabores/variantes, cada una trae su propio
+// "codigo" también (ej: "tarta1" para "Pie de Limón"). Eso es lo que usa
+// el resto del sistema (pedido-fabrica.js, stock-calculado.js,
+// pronostico-fabricacion.js) para hacer match robusto a acentos, mayúsculas
+// y typos del Excel -- el texto queda solo para mostrarlo en pantalla.
 //
 // GET /.netlify/functions/productos-toteat?dias=7
 
@@ -29,7 +36,7 @@ exports.handler = async (event) => {
     const byProduct = new Map();
     for (const dia of porDia) {
       (dia.products || []).forEach((p) => {
-        const e = byProduct.get(p.name) || { revenue: 0, quantity: 0, category: p.category };
+        const e = byProduct.get(p.name) || { revenue: 0, quantity: 0, category: p.category, codigo: p.codigo || null, variantes: p.variantes || [] };
         e.revenue += p.revenue;
         e.quantity += p.quantity;
         byProduct.set(p.name, e);
@@ -41,7 +48,14 @@ exports.handler = async (event) => {
       const cat = v.category || 'Sin categoría';
       if (!porCategoria.has(cat)) porCategoria.set(cat, []);
       const precioUnitario = v.quantity > 0 ? Math.round(v.revenue / v.quantity) : 0;
-      porCategoria.get(cat).push({ producto: name, unidadesVendidas: v.quantity, ventaTotal: v.revenue, precioUnitario });
+      porCategoria.get(cat).push({
+        producto: name,
+        unidadesVendidas: v.quantity,
+        ventaTotal: v.revenue,
+        precioUnitario,
+        codigo: v.codigo,
+        variantes: v.variantes,
+      });
     }
 
     const categorias = [...porCategoria.entries()]
@@ -59,44 +73,48 @@ exports.handler = async (event) => {
 };
 
 // Detecta grupos de productos que son la MISMA base con distintas
-// variantes/sabores entre paréntesis -- ej: "Club Desayuno Muffin
-// (Cappuccino)" y "Club Desayuno Muffin (Latte, M. Arándano)" son ambos
-// de la familia "Club Desayuno Muffin". Además, separa cada "token" dentro
-// del paréntesis (separados por coma) y suma cuánto se vendió de CADA
-// token en total dentro de esa familia -- así "M. Arándano" suma tanto el
-// combo con café Latte como el combo con Cappuccino, por ejemplo.
+// variantes/sabores -- ej: "Club Desayuno Muffin (Cappuccino)" y "Club
+// Desayuno Muffin (Latte, M. Arándano)" son ambos de la familia "Club
+// Desayuno Muffin". Se agrupa por CÓDIGO (el id del producto base en
+// Toteat), no por texto -- así no importa si el nombre viene con acentos
+// rotos o mayúsculas distintas, el código no cambia nunca. Dentro de cada
+// familia, cada sabor/variante también se identifica por SU código propio
+// (ej: "tarta1" para "Pie de Limón"), tomado de sale.products directamente
+// (ver mergeModifiers en ventas-fabrica.js) -- ya no se parsea el texto
+// entre paréntesis.
 //
-// Esto es lo que permite en la pantalla de recetas elegir "el sabor
+// Esto es lo que permite en la pantalla de Recetas elegir "el sabor
 // Arándano" una sola vez, y que el pedido a fábrica sume TODAS las ventas
-// que incluyan ese sabor, sin importar con qué otro modificador se
-// combinó.
+// que incluyan ese sabor (por código), sin importar con qué otro
+// modificador se combinó ni cómo esté escrito el texto.
 function detectarFamilias(productos) {
-  const familias = new Map(); // base -> Map(token -> {unidadesVendidas, ventaTotal})
+  // codigoBase -> { base(texto para mostrar), codigoBase, tokens: Map(codigoToken -> {...}) }
+  const familias = new Map();
 
   for (const p of productos) {
-    const match = p.producto.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
-    if (!match) continue;
-    const base = match[1].trim();
-    const tokens = match[2].split(',').map((t) => t.trim()).filter(Boolean);
-    if (tokens.length === 0) continue;
+    if (!p.variantes || !p.variantes.length || !p.codigo) continue;
 
-    if (!familias.has(base)) familias.set(base, new Map());
-    const mapaTokens = familias.get(base);
-    tokens.forEach((token) => {
-      const e = mapaTokens.get(token) || { unidadesVendidas: 0, ventaTotal: 0 };
+    if (!familias.has(p.codigo)) {
+      const baseTexto = p.producto.split(' (')[0].trim();
+      familias.set(p.codigo, { base: baseTexto, codigoBase: p.codigo, tokens: new Map() });
+    }
+    const fam = familias.get(p.codigo);
+
+    p.variantes.forEach((v) => {
+      const key = v.codigo || v.nombre; // por si algún día viene sin código, no se pierde el dato
+      const e = fam.tokens.get(key) || { token: v.nombre, codigo: v.codigo || null, unidadesVendidas: 0, ventaTotal: 0 };
       e.unidadesVendidas += p.unidadesVendidas;
       e.ventaTotal += p.ventaTotal;
-      mapaTokens.set(token, e);
+      fam.tokens.set(key, e);
     });
   }
 
-  return [...familias.entries()]
-    .filter(([, mapaTokens]) => mapaTokens.size > 1) // no vale la pena agrupar si hay un solo sabor
-    .map(([base, mapaTokens]) => ({
-      base,
-      tokens: [...mapaTokens.entries()]
-        .map(([token, v]) => ({ token, unidadesVendidas: v.unidadesVendidas, ventaTotal: v.ventaTotal }))
-        .sort((a, b) => b.unidadesVendidas - a.unidadesVendidas),
+  return [...familias.values()]
+    .filter((fam) => fam.tokens.size > 1) // no vale la pena agrupar si hay un solo sabor
+    .map((fam) => ({
+      base: fam.base,
+      codigoBase: fam.codigoBase,
+      tokens: [...fam.tokens.values()].sort((a, b) => b.unidadesVendidas - a.unidadesVendidas),
     }))
     .sort((a, b) => a.base.localeCompare(b.base));
 }

@@ -27,23 +27,28 @@
 // Chile (America/Santiago) -- el MISMO formato que trae dateClosed de
 // Toteat -- para poder compararlas como strings sin líos de huso horario
 // (ver ahoraLocalTexto()).
+//
+// MATCH POR CÓDIGO (nuevo): cada producto/sabor de Toteat trae su propio
+// código interno estable (ej: "TT001" para Tartaleta, "tarta1" para el
+// sabor Pie de Limón) -- eso no cambia aunque el texto del nombre venga
+// con acentos rotos o el Excel lo haya escrito distinto. Si la receta
+// tiene "codigoProducto" (match exacto) o "codigoBase"+"patronCodigo"
+// (match por sabor/variante), se usa el código para encontrar las ventas,
+// no el texto. Si la receta es vieja y no tiene código guardado todavía,
+// se cae de vuelta al match por texto (como antes) -- así no se rompe
+// nada de lo que ya está guardado.
 
 // Explota cantidades de PRODUCTO (vendido u otro) a cantidades de INSUMO,
-// usando las mismas reglas de "patronToken" (familias de sabores/variantes
-// agrupadas) que ya usa pedido-fabrica.js.
-function explotarARecetas(recetas, cantidadPorProducto) {
+// usando las mismas reglas de "patronToken"/"patronCodigo" (familias de
+// sabores/variantes agrupadas) que ya usa pedido-fabrica.js.
+//
+// `productosPorNombre` es un Map "nombre exacto del día" -> { codigo,
+// variantes }, para poder resolver el match por código. Es opcional: si no
+// se pasa, se hace match por texto nomás (comportamiento viejo).
+function explotarARecetas(recetas, cantidadPorProducto, productosPorNombre) {
   const porInsumo = new Map();
   for (const receta of recetas || []) {
-    let cantidadProducto = 0;
-    if (receta.patronToken) {
-      for (const [nombre, cantidad] of cantidadPorProducto.entries()) {
-        if (nombre.startsWith(receta.producto) && nombre.includes(receta.patronToken)) {
-          cantidadProducto += cantidad;
-        }
-      }
-    } else {
-      cantidadProducto = cantidadPorProducto.get(receta.producto) || 0;
-    }
+    const cantidadProducto = cantidadProductoParaReceta(receta, cantidadPorProducto, productosPorNombre);
     if (cantidadProducto === 0) continue;
     const necesidad = cantidadProducto * receta.cantidadPorUnidad;
     porInsumo.set(receta.insumo, (porInsumo.get(receta.insumo) || 0) + necesidad);
@@ -51,11 +56,47 @@ function explotarARecetas(recetas, cantidadPorProducto) {
   return porInsumo;
 }
 
+function cantidadProductoParaReceta(receta, cantidadPorProducto, productosPorNombre) {
+  // Receta sin patrón (producto exacto, ej: "Ensalada Pollo Palta T.A").
+  if (!receta.patronToken && !receta.patronCodigo) {
+    if (receta.codigoProducto && productosPorNombre) {
+      let total = 0;
+      for (const [nombre, cantidad] of cantidadPorProducto.entries()) {
+        const info = productosPorNombre.get(nombre);
+        if (info && info.codigo === receta.codigoProducto) total += cantidad;
+      }
+      return total;
+    }
+    return cantidadPorProducto.get(receta.producto) || 0;
+  }
+
+  // Receta por patrón/sabor (ej: base "Club Desayuno Muffin" + sabor
+  // "M. Arándano"). Si hay código de la variante, se hace match por
+  // código (robusto a acentos/mayúsculas); si no, por texto (como antes).
+  let total = 0;
+  for (const [nombre, cantidad] of cantidadPorProducto.entries()) {
+    if (receta.patronCodigo && productosPorNombre) {
+      const info = productosPorNombre.get(nombre);
+      if (!info) continue;
+      const coincideBase = receta.codigoBase ? info.codigo === receta.codigoBase : nombre.startsWith(receta.producto);
+      const coincideVariante = (info.variantes || []).some((v) => v.codigo === receta.patronCodigo);
+      if (coincideBase && coincideVariante) total += cantidad;
+    } else if (nombre.startsWith(receta.producto) && nombre.includes(receta.patronToken)) {
+      total += cantidad;
+    }
+  }
+  return total;
+}
+
 // Suma, por producto, las unidades REALMENTE vendidas (no proyectadas) en
 // porDia desde fechaDesdeTexto ("YYYY-MM-DD HH:MM:SS") hasta ahora.
 // El día completo del conteo se filtra por HORA (usando productsByHour)
 // para no contar de nuevo lo que ya se vendió antes del conteo ese mismo
 // día; los días posteriores se cuentan completos.
+//
+// OJO: se mantiene la firma de siempre (devuelve solo el Map) para no
+// romper a quien ya la use así (ej. stock-cafeteria.js). El mapa de
+// códigos para el match robusto se arma aparte, con mapaProductosPorNombre().
 function ventasRealesPorProductoDesde(porDia, fechaDesdeTexto) {
   const fechaCorte = fechaDesdeTexto.slice(0, 10); // YYYY-MM-DD
   const horaCorte = Number(fechaDesdeTexto.slice(11, 13));
@@ -79,6 +120,20 @@ function ventasRealesPorProductoDesde(porDia, fechaDesdeTexto) {
   return porProducto;
 }
 
+// Arma "nombre del día" -> { codigo, variantes } a partir de porDia, para
+// que explotarARecetas() pueda hacer match por código en vez de por texto.
+function mapaProductosPorNombre(porDia) {
+  const mapa = new Map();
+  for (const dia of porDia || []) {
+    (dia.products || []).forEach((p) => {
+      if (!mapa.has(p.name)) {
+        mapa.set(p.name, { codigo: p.codigo || null, variantes: p.variantes || [] });
+      }
+    });
+  }
+  return mapa;
+}
+
 // Arma la tabla de stock calculado, un objeto por insumo configurado en
 // `stock`. Acepta recetas/mermas/recepciones vacíos o undefined.
 function calcularStockPorInsumo({ recetas, stock, mermas, recepciones, porDia }) {
@@ -90,7 +145,8 @@ function calcularStockPorInsumo({ recetas, stock, mermas, recepciones, porDia })
     const ultimoConteoFecha = s.ultimoConteoFecha || ahoraLocalTexto();
 
     const ventasPorProducto = ventasRealesPorProductoDesde(porDia, ultimoConteoFecha);
-    const vendidoPorInsumo = explotarARecetas(recetas, ventasPorProducto);
+    const productosPorNombre = mapaProductosPorNombre(porDia);
+    const vendidoPorInsumo = explotarARecetas(recetas, ventasPorProducto, productosPorNombre);
     const vendido = round2(vendidoPorInsumo.get(s.insumo) || 0);
 
     const recibido = round2((recepciones || [])
@@ -106,6 +162,7 @@ function calcularStockPorInsumo({ recetas, stock, mermas, recepciones, porDia })
 
     return {
       insumo: s.insumo,
+      codigo: s.codigo || '',
       unidadEnvase: s.unidadEnvase || 'un',
       tamanoEnvase: s.tamanoEnvase > 0 ? s.tamanoEnvase : 1,
       diasElaboracion: Number(s.diasElaboracion || 0),
@@ -142,5 +199,6 @@ module.exports = {
   calcularStockPorInsumo,
   explotarARecetas,
   ventasRealesPorProductoDesde,
+  mapaProductosPorNombre,
   ahoraLocalTexto,
 };

@@ -214,15 +214,34 @@ function promedioVentaProducto(historial, receta, diaSemanaObjetivo) {
   return 0;
 }
 
-// Cuánto se vendió de la receta en ESE día -- nombre exacto, o suma de
-// todos los productos que empiecen con la base y contengan el sabor
-// (patronToken), igual que en pedido-fabrica.js / stock-calculado.js.
+// Cuánto se vendió de la receta en ESE día. Si la receta tiene código
+// (codigoProducto, o codigoBase+patronCodigo), hace match por código
+// -- robusto a acentos/mayúsculas/typos del Excel. Si no, cae al match
+// por texto de siempre (recetas viejas sin código guardado todavía).
 function cantidadDelDia(dia, receta) {
-  if (!receta.patronToken) {
-    const p = (dia.products || []).find((x) => x.name === receta.producto);
+  const productos = dia.products || [];
+
+  if (!receta.patronToken && !receta.patronCodigo) {
+    if (receta.codigoProducto) {
+      return productos
+        .filter((p) => p.codigo === receta.codigoProducto)
+        .reduce((s, p) => s + p.quantity, 0);
+    }
+    const p = productos.find((x) => x.name === receta.producto);
     return p ? p.quantity : 0;
   }
-  return (dia.products || [])
+
+  if (receta.patronCodigo) {
+    return productos
+      .filter((p) => {
+        const coincideBase = receta.codigoBase ? p.codigo === receta.codigoBase : p.name.startsWith(receta.producto);
+        const coincideVariante = (p.variantes || []).some((v) => v.codigo === receta.patronCodigo);
+        return coincideBase && coincideVariante;
+      })
+      .reduce((s, p) => s + p.quantity, 0);
+  }
+
+  return productos
     .filter((p) => p.name.startsWith(receta.producto) && p.name.includes(receta.patronToken))
     .reduce((s, p) => s + p.quantity, 0);
 }
