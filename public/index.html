@@ -160,7 +160,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.7</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.8</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -636,18 +636,27 @@ async function cargarStock() {
   }
 }
 
+let itemsParaMerma = []; // insumos + productos + sabores, todo lo que se puede mermar
+
 async function cargarMermas() {
   const loading = document.getElementById('loading-mermas');
   loading.style.display = 'block';
   loading.textContent = 'Cargando...';
   try {
-    const json = await obtenerDatosStockCafeteria();
+    const [json, resProductos, resCatalogo] = await Promise.all([
+      obtenerDatosStockCafeteria(),
+      fetch('/.netlify/functions/productos-toteat').then((r) => r.json()),
+      fetch('/.netlify/functions/productos-catalogo').then((r) => r.json()),
+    ]);
     loading.style.display = 'none';
     if (json.nota) {
       loading.style.display = 'block';
       loading.textContent = json.nota;
       return;
     }
+
+    itemsParaMerma = armarItemsParaMerma(resProductos, resCatalogo);
+
     document.getElementById('seccion-mermas').style.display = 'block';
     renderLogMermas(json.mermasHoy || []);
     document.getElementById('merma-buscador').focus();
@@ -655,6 +664,57 @@ async function cargarMermas() {
     loading.style.display = 'block';
     loading.textContent = 'Error de conexión: ' + e.message;
   }
+}
+
+// Junta en una sola lista buscable: insumos de fábrica (mermas directas) +
+// productos vendidos recientes + catálogo completo (para que aparezcan
+// también los de baja rotación, como "Bagel Huevo Queso").
+function armarItemsParaMerma(resProductos, resCatalogo) {
+  const items = [];
+  const vistos = new Set(); // evita duplicados por código
+
+  stockData.forEach((s) => {
+    items.push({ tipo: 'insumo', nombre: s.insumo, codigo: s.codigo || '', insumo: s.insumo });
+  });
+
+  const agregarProducto = (nombre, codigo) => {
+    const key = 'p:' + codigo;
+    if (codigo && vistos.has(key)) return;
+    if (codigo) vistos.add(key);
+    items.push({ tipo: 'producto', nombre, codigo: codigo || '', producto: nombre, codigoProducto: codigo || null });
+  };
+  const agregarSabor = (base, token, codigoBase, patronCodigo) => {
+    const key = 'ps:' + codigoBase + '|' + patronCodigo;
+    if (codigoBase && patronCodigo && vistos.has(key)) return;
+    if (codigoBase && patronCodigo) vistos.add(key);
+    items.push({
+      tipo: 'producto-sabor',
+      nombre: `${base} (${token})`,
+      codigo: patronCodigo || '',
+      producto: base,
+      patronToken: token,
+      codigoBase: codigoBase || null,
+      patronCodigo: patronCodigo || null,
+    });
+  };
+
+  (resProductos.ok ? resProductos.categorias : []).forEach((cat) => {
+    (cat.productos || []).forEach((p) => agregarProducto(p.producto, p.codigo));
+    (cat.familias || []).forEach((fam) => {
+      fam.tokens.forEach((tok) => agregarSabor(fam.base, tok.token, fam.codigoBase, tok.codigo));
+    });
+  });
+
+  (resCatalogo.ok ? resCatalogo.categorias : []).forEach((cat) => {
+    (cat.productos || []).forEach((p) => {
+      agregarProducto(p.producto, p.codigo);
+      (p.gruposVariantes || []).forEach((grupo) => {
+        grupo.opciones.forEach((op) => agregarSabor(p.producto, op.nombre, p.codigo, op.codigo));
+      });
+    });
+  });
+
+  return items;
 }
 
 function renderStockCalculado() {
@@ -684,7 +744,8 @@ function renderLogMermas(mermasHoy) {
   }
   cont.innerHTML = mermasHoy.map((m) => {
     const hora = (m.fecha || '').slice(11, 16);
-    return `<div>${hora} · ${m.insumo} · ${m.cantidad}${m.motivo ? ' · ' + escapeAttr(m.motivo) : ''}</div>`;
+    const nombre = m.nombreVisible || m.insumo || m.producto || '';
+    return `<div>${hora} · ${escapeAttr(nombre)} · ${m.cantidad}${m.motivo ? ' · ' + escapeAttr(m.motivo) : ''}</div>`;
   }).join('');
 }
 
@@ -716,18 +777,20 @@ function normalizarBusqueda(s) {
     .toLowerCase().trim();
 }
 
-let mermaInsumoSeleccionado = null;
+let mermaItemSeleccionado = null;
 let mermaIndiceActivo = -1;
 
 function buscarInsumos(query) {
   const q = normalizarBusqueda(query);
   if (!q) return [];
-  return stockData.filter((s) => {
-    const nombreCoincide = normalizarBusqueda(s.insumo).includes(q);
+  return itemsParaMerma.filter((s) => {
+    const nombreCoincide = normalizarBusqueda(s.nombre).includes(q);
     const codigoCoincide = s.codigo && normalizarBusqueda(s.codigo).includes(q);
     return nombreCoincide || codigoCoincide;
   }).slice(0, 8);
 }
+
+const ETIQUETA_TIPO = { insumo: 'insumo fábrica', producto: 'producto', 'producto-sabor': 'producto' };
 
 function renderResultadosMerma(resultados) {
   const cont = document.getElementById('merma-resultados');
@@ -739,7 +802,7 @@ function renderResultadosMerma(resultados) {
   }
   cont.innerHTML = resultados.map((s, i) => `
     <div class="merma-resultado-item" data-idx="${i}">
-      <span>${s.insumo}</span>
+      <span>${s.nombre} <span style="color:var(--ink-soft);font-size:11px;">(${ETIQUETA_TIPO[s.tipo]})</span></span>
       ${s.codigo ? `<span class="codigo">${s.codigo}</span>` : ''}
     </div>
   `).join('');
@@ -750,11 +813,11 @@ function renderResultadosMerma(resultados) {
 }
 
 function seleccionarInsumoMerma(s) {
-  mermaInsumoSeleccionado = s.insumo;
+  mermaItemSeleccionado = s;
   document.getElementById('merma-resultados').classList.remove('visible');
   document.getElementById('paso-buscar-merma').style.display = 'none';
   document.getElementById('panel-cantidad-merma').style.display = 'block';
-  document.getElementById('teclado-merma-nombre').textContent = s.insumo;
+  document.getElementById('teclado-merma-nombre').textContent = s.nombre;
   tecladoValor = '0';
   actualizarDisplayTeclado();
   document.getElementById('merma-motivo').value = '';
@@ -762,7 +825,7 @@ function seleccionarInsumoMerma(s) {
 }
 
 function volverABuscarMerma() {
-  mermaInsumoSeleccionado = null;
+  mermaItemSeleccionado = null;
   document.getElementById('panel-cantidad-merma').style.display = 'none';
   document.getElementById('paso-buscar-merma').style.display = 'block';
   const buscador = document.getElementById('merma-buscador');
@@ -834,11 +897,11 @@ document.querySelectorAll('.teclado-merma-grid [data-tecla]').forEach((btn) => {
 });
 
 document.getElementById('btn-guardar-merma').addEventListener('click', async () => {
-  const insumo = mermaInsumoSeleccionado;
+  const item = mermaItemSeleccionado;
   const cantidad = Number(tecladoValor);
   const motivo = document.getElementById('merma-motivo').value.trim();
   const statusEl = document.getElementById('status-merma');
-  if (!insumo || !(cantidad > 0)) {
+  if (!item || !(cantidad > 0)) {
     statusEl.textContent = 'Ingresa una cantidad válida con el teclado.';
     statusEl.className = 'status err';
     return;
@@ -846,14 +909,27 @@ document.getElementById('btn-guardar-merma').addEventListener('click', async () 
   statusEl.textContent = 'Guardando...';
   statusEl.className = 'status';
   try {
+    const body = { accion: 'merma', tipo: item.tipo, cantidad, motivo };
+    if (item.tipo === 'insumo') {
+      body.insumo = item.insumo;
+    } else if (item.tipo === 'producto') {
+      body.producto = item.producto;
+      body.codigoProducto = item.codigoProducto;
+    } else if (item.tipo === 'producto-sabor') {
+      body.producto = item.producto;
+      body.patronToken = item.patronToken;
+      body.codigoBase = item.codigoBase;
+      body.patronCodigo = item.patronCodigo;
+    }
+
     const res = await fetch('/.netlify/functions/stock-cafeteria', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'merma', insumo, cantidad, motivo }),
+      body: JSON.stringify(body),
     });
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'Error desconocido');
-    statusEl.textContent = `Merma registrada: ${cantidad} de "${insumo}".`;
+    statusEl.textContent = `Merma registrada: ${cantidad} de "${item.nombre}".`;
     statusEl.className = 'status ok';
     const jsonActualizado = await obtenerDatosStockCafeteria();
     renderLogMermas(jsonActualizado.mermasHoy || []);
