@@ -1,12 +1,20 @@
 // netlify/functions/stock-cafeteria.js
 //
-// Pestaña "Stock y mermas". Muestra el stock calculado de cada insumo (ver
-// stock-calculado.js) y deja registrar los 3 eventos manuales que hacen
-// que ese cálculo siga sirviendo sin tener que contar todo cada día:
+// Pestaña "Stock" + pestaña "Mermas". Muestra el stock calculado de cada
+// insumo (ver stock-calculado.js) y deja registrar los 3 eventos manuales
+// que hacen que ese cálculo siga sirviendo sin tener que contar todo cada
+// día:
 //
 //   - "recepcion": llegó pedido de fábrica (normalmente se dispara desde
 //     el botón "Confirmar recepción de hoy" en la pestaña "Pedido de hoy").
-//   - "merma": se botó / se dañó / se venció algo.
+//   - "merma": se botó / se dañó / se venció algo. Puede ser:
+//       * una merma de INSUMO directo (ej: se echó a perder medio kilo de
+//         "Lomo vetado sous vide 250gr" que nunca se vendió) -- resta
+//         directo de ese insumo.
+//       * una merma de PRODUCTO vendido en Toteat (ej: se cayó un "Bagel
+//         Huevo Queso") -- si ese producto tiene receta que lo liga a un
+//         insumo de fábrica, se explota igual que una venta y también
+//         descuenta ese insumo. Si no tiene receta, queda solo de registro.
 //   - "conteo": alguien contó de verdad -- resetea el punto de partida
 //     (botón "Recontar").
 //
@@ -14,7 +22,9 @@
 //   -> { ok, items: [...stock calculado por insumo...], mermasHoy: [...] }
 //
 // POST /.netlify/functions/stock-cafeteria
-//   body: { accion: 'merma', insumo, cantidad, motivo? }
+//   body: { accion: 'merma', tipo: 'insumo', insumo, cantidad, motivo? }
+//   body: { accion: 'merma', tipo: 'producto', producto, codigoProducto?, cantidad, motivo? }
+//   body: { accion: 'merma', tipo: 'producto-sabor', producto, patronToken, codigoBase?, patronCodigo?, cantidad, motivo? }
 //   body: { accion: 'recepcion', items: [{ insumo, cantidad }, ...] }
 //   body: { accion: 'conteo', insumo, valor }
 //
@@ -80,7 +90,8 @@ exports.handler = async (event) => {
       const hoyLocal = ahoraLocalTexto().slice(0, 10);
       const mermasHoy = (mermas || [])
         .filter((m) => (m.fecha || '').slice(0, 10) === hoyLocal)
-        .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+        .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
+        .map((m) => ({ ...m, nombreVisible: nombreVisibleMerma(m) }));
 
       return jsonResponse(200, { ok: true, items, mermasHoy });
     } catch (e) {
@@ -97,16 +108,32 @@ exports.handler = async (event) => {
     }
 
     if (body.accion === 'merma') {
-      if (!body.insumo || !(Number(body.cantidad) > 0)) {
-        return jsonResponse(400, { ok: false, error: 'Se espera { insumo, cantidad > 0 }.' });
+      if (!(Number(body.cantidad) > 0)) {
+        return jsonResponse(400, { ok: false, error: 'Se espera cantidad > 0.' });
       }
+
+      const tipo = body.tipo === 'producto' || body.tipo === 'producto-sabor' ? body.tipo : 'insumo';
+      let entrada = { tipo, cantidad: Number(body.cantidad), motivo: String(body.motivo || '').trim(), fecha: ahoraLocalTexto() };
+
+      if (tipo === 'insumo') {
+        if (!body.insumo) return jsonResponse(400, { ok: false, error: 'Se espera { insumo } para merma de tipo "insumo".' });
+        entrada.insumo = String(body.insumo).trim();
+      } else if (tipo === 'producto') {
+        if (!body.producto) return jsonResponse(400, { ok: false, error: 'Se espera { producto } para merma de tipo "producto".' });
+        entrada.producto = String(body.producto).trim();
+        if (body.codigoProducto) entrada.codigoProducto = String(body.codigoProducto).trim();
+      } else if (tipo === 'producto-sabor') {
+        if (!body.producto || !body.patronToken) {
+          return jsonResponse(400, { ok: false, error: 'Se espera { producto, patronToken } para merma de tipo "producto-sabor".' });
+        }
+        entrada.producto = String(body.producto).trim();
+        entrada.patronToken = String(body.patronToken).trim();
+        if (body.codigoBase) entrada.codigoBase = String(body.codigoBase).trim();
+        if (body.patronCodigo) entrada.patronCodigo = String(body.patronCodigo).trim();
+      }
+
       const mermas = (await store.get('mermas', { type: 'json' })) || [];
-      mermas.push({
-        insumo: String(body.insumo).trim(),
-        cantidad: Number(body.cantidad),
-        motivo: String(body.motivo || '').trim(),
-        fecha: ahoraLocalTexto(),
-      });
+      mermas.push(entrada);
       await store.setJSON('mermas', mermas);
       return jsonResponse(200, { ok: true });
     }
@@ -144,6 +171,14 @@ exports.handler = async (event) => {
 
   return jsonResponse(405, { ok: false, error: 'Método no soportado.' });
 };
+
+// Texto para mostrar en el historial: el insumo directo, o el producto
+// (+ sabor si corresponde) cuando la merma fue de un producto vendido.
+function nombreVisibleMerma(m) {
+  if (m.tipo === 'producto-sabor') return `${m.producto} (${m.patronToken})`;
+  if (m.tipo === 'producto') return m.producto;
+  return m.insumo;
+}
 
 function formatYYYYMMDD(d) {
   const y = d.getFullYear();

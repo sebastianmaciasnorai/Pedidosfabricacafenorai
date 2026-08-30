@@ -38,6 +38,44 @@
 // se cae de vuelta al match por texto (como antes) -- así no se rompe
 // nada de lo que ya está guardado.
 
+// Explota mermas registradas sobre un PRODUCTO vendido (ej: se mermó 1
+// "Bagel Huevo Queso") a cantidad de INSUMO, usando la receta que liga ese
+// producto a un insumo de fábrica -- igual que se hace con las ventas.
+// Si el producto mermado no tiene receta (no usa nada de fábrica), no
+// aporta a ningún insumo, y la merma queda solo como registro.
+//
+// Match por código (robusto a acentos/mayúsculas): "producto" compara
+// receta.codigoProducto con m.codigoProducto; "producto-sabor" compara
+// receta.patronCodigo con m.patronCodigo. Si la merma o la receta son
+// viejas y no tienen código guardado, cae de vuelta al texto.
+function explotarMermasDeProducto(recetas, mermasProducto) {
+  const porInsumo = new Map();
+  for (const m of mermasProducto || []) {
+    for (const receta of recetas || []) {
+      let coincide = false;
+
+      if (m.tipo === 'producto') {
+        if (!receta.patronToken && !receta.patronCodigo) {
+          coincide = (receta.codigoProducto && m.codigoProducto)
+            ? receta.codigoProducto === m.codigoProducto
+            : receta.producto === m.producto;
+        }
+      } else if (m.tipo === 'producto-sabor') {
+        if (receta.patronCodigo && m.patronCodigo) {
+          coincide = receta.patronCodigo === m.patronCodigo;
+        } else if (receta.patronToken) {
+          coincide = receta.producto === m.producto && receta.patronToken === m.patronToken;
+        }
+      }
+
+      if (!coincide) continue;
+      const necesidad = Number(m.cantidad) * receta.cantidadPorUnidad;
+      porInsumo.set(receta.insumo, (porInsumo.get(receta.insumo) || 0) + necesidad);
+    }
+  }
+  return porInsumo;
+}
+
 // Explota cantidades de PRODUCTO (vendido u otro) a cantidades de INSUMO,
 // usando las mismas reglas de "patronToken"/"patronCodigo" (familias de
 // sabores/variantes agrupadas) que ya usa pedido-fabrica.js.
@@ -153,9 +191,16 @@ function calcularStockPorInsumo({ recetas, stock, mermas, recepciones, porDia })
       .filter((r) => r.insumo === s.insumo && r.fecha > ultimoConteoFecha)
       .reduce((acc, r) => acc + (Number(r.cantidad) || 0), 0));
 
-    const merma = round2((mermas || [])
-      .filter((m) => m.insumo === s.insumo && m.fecha > ultimoConteoFecha)
-      .reduce((acc, m) => acc + (Number(m.cantidad) || 0), 0));
+    const merma = round2(
+      (mermas || [])
+        .filter((m) => (!m.tipo || m.tipo === 'insumo') && m.insumo === s.insumo && m.fecha > ultimoConteoFecha)
+        .reduce((acc, m) => acc + (Number(m.cantidad) || 0), 0)
+      +
+      (explotarMermasDeProducto(
+        recetas,
+        (mermas || []).filter((m) => (m.tipo === 'producto' || m.tipo === 'producto-sabor') && m.fecha > ultimoConteoFecha)
+      ).get(s.insumo) || 0)
+    );
 
     const stockCalculado = round2(ultimoConteo + recibido - vendido - merma);
     const stockMinimo = Number(s.stockMinimo || 0);
