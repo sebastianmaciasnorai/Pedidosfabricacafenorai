@@ -95,6 +95,24 @@
   button.chico{border:1px solid var(--line);background:#fff;color:var(--ink-soft);font-size:11px;font-weight:600;padding:4px 8px;border-radius:6px;cursor:pointer;}
   button.chico:hover{border-color:var(--accent);color:var(--accent);}
   .merma-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);}
+  .merma-buscador-wrap{position:relative;flex:1;min-width:220px;}
+  .merma-buscador-wrap input{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13.5px;}
+  .merma-buscador-wrap input:focus{outline:none;border-color:var(--accent);}
+  .merma-resultados-dropdown{
+    position:absolute;top:100%;left:0;right:0;z-index:20;
+    background:var(--panel);border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;
+    max-height:220px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,0.08);display:none;
+  }
+  .merma-resultados-dropdown.visible{display:block;}
+  .merma-resultado-item{padding:9px 10px;font-size:13px;cursor:pointer;border-bottom:1px dashed var(--line);display:flex;justify-content:space-between;gap:8px;}
+  .merma-resultado-item:last-child{border-bottom:none;}
+  .merma-resultado-item:hover, .merma-resultado-item.activo{background:#F4FAFB;}
+  .merma-resultado-item .codigo{color:var(--ink-soft);font-family:"JetBrains Mono",monospace;font-size:11px;white-space:nowrap;}
+  #merma-seleccionado-chip{
+    display:flex;align-items:center;gap:6px;background:#F4FAFB;border:1px solid var(--accent);
+    color:var(--accent);border-radius:999px;padding:5px 10px;font-size:12.5px;font-weight:600;
+  }
+  #merma-seleccionado-chip button{border:none;background:none;color:var(--accent);cursor:pointer;font-weight:700;}
   .merma-form select{flex:1;min-width:160px;border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-family:inherit;font-size:13px;background:#fff;}
   .merma-form input[type="text"]{flex:1;min-width:140px;}
   .merma-form input{border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-family:"JetBrains Mono",monospace;font-size:12.5px;background:#fff;}
@@ -118,7 +136,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.3</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.4</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -205,7 +223,11 @@
     </table>
 
     <div class="merma-form">
-      <select id="merma-insumo"></select>
+      <div class="merma-buscador-wrap">
+        <input type="text" id="merma-buscador" placeholder="Buscar insumo por nombre o código (o escanea un código de barras)..." autocomplete="off">
+        <div id="merma-resultados" class="merma-resultados-dropdown"></div>
+      </div>
+      <div id="merma-seleccionado-chip" style="display:none;"></div>
       <input type="number" id="merma-cantidad" placeholder="Cantidad" step="0.1">
       <input type="text" id="merma-motivo" placeholder="Motivo (opcional): se quemó, se cayó...">
       <button class="save" id="btn-guardar-merma">+ Registrar merma</button>
@@ -236,7 +258,7 @@
     <h2>Insumos de fábrica (configuración)</h2>
     <p class="hint">Esto es solo configuración -- se toca cuando cambia el menú, no día a día. El stock en vivo (cuánto hay ahora) y las mermas se manejan en la pestaña "Stock y mermas". "Tamaño envase" es cuánto trae cada envase, en la MISMA unidad que uses en las recetas de arriba. "Días elaborac." es cuántos días se demora la fábrica en tener listo ESE insumo (ej: 3 para un brownie que se hornea, se enfría y se corta al otro día) -- déjalo en 0 si se puede reponer el mismo día. Con eso, la pestaña "Por empezar a fabricar" te avisa con anticipación.</p>
     <table id="tabla-stock">
-      <thead><tr><th>Insumo</th><th style="width:80px">Días elaborac.</th><th style="width:80px">Tamaño envase</th><th style="width:80px">Mínimo (envases)</th><th style="width:30px"></th></tr></thead>
+      <thead><tr><th>Insumo</th><th style="width:90px">Código</th><th style="width:80px">Días elaborac.</th><th style="width:80px">Tamaño envase</th><th style="width:80px">Mínimo (envases)</th><th style="width:30px"></th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="toolbar">
@@ -514,8 +536,12 @@ async function cargarStock() {
   loading.style.display = 'block';
   loading.textContent = 'Calculando...';
   try {
-    const res = await fetch('/.netlify/functions/stock-cafeteria');
+    const [res, resConfig] = await Promise.all([
+      fetch('/.netlify/functions/stock-cafeteria'),
+      fetch('/.netlify/functions/fabrica-datos?key=stock'),
+    ]);
     const json = await res.json();
+    const jsonConfig = await resConfig.json();
     loading.style.display = 'none';
 
     if (!json.ok) {
@@ -529,7 +555,14 @@ async function cargarStock() {
       return;
     }
 
-    stockData = json.items || [];
+    // El código lo define la persona en la pestaña "Recetas" (tabla de
+    // stock); acá solo lo pegamos al insumo correspondiente para poder
+    // buscarlo con el lector de código de barras.
+    const codigoPorInsumo = new Map(
+      (jsonConfig.data || []).map((c) => [c.insumo, c.codigo || ''])
+    );
+    stockData = (json.items || []).map((s) => ({ ...s, codigo: codigoPorInsumo.get(s.insumo) || '' }));
+
     document.getElementById('seccion-stock-calculado').style.display = 'block';
     renderStockCalculado();
     renderLogMermas(json.mermasHoy || []);
@@ -552,9 +585,6 @@ function renderStockCalculado() {
       <td><button class="chico" data-recontar="${escapeAttr(s.insumo)}">Recontar</button></td>
     </tr>`;
   }).join('');
-
-  document.getElementById('merma-insumo').innerHTML = stockData
-    .map((s) => `<option value="${escapeAttr(s.insumo)}">${s.insumo}</option>`).join('');
 
   tbody.querySelectorAll('[data-recontar]').forEach((btn) => {
     btn.addEventListener('click', () => recontarInsumo(btn.dataset.recontar));
@@ -591,13 +621,113 @@ async function recontarInsumo(insumo) {
   }
 }
 
+// ===================== BUSCADOR DE MERMAS (en tiempo real, amigable con lector de código de barras) =====================
+
+// Sin tildes, sin mayúsculas -- así "Maracuya", "MARACUYÁ" y "maracuyá"
+// buscan exactamente lo mismo.
+function normalizarBusqueda(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim();
+}
+
+let mermaInsumoSeleccionado = null;
+let mermaIndiceActivo = -1;
+
+function buscarInsumos(query) {
+  const q = normalizarBusqueda(query);
+  if (!q) return [];
+  return stockData.filter((s) => {
+    const nombreCoincide = normalizarBusqueda(s.insumo).includes(q);
+    const codigoCoincide = s.codigo && normalizarBusqueda(s.codigo).includes(q);
+    return nombreCoincide || codigoCoincide;
+  }).slice(0, 8);
+}
+
+function renderResultadosMerma(resultados) {
+  const cont = document.getElementById('merma-resultados');
+  mermaIndiceActivo = -1;
+  if (!resultados.length) {
+    cont.classList.remove('visible');
+    cont.innerHTML = '';
+    return;
+  }
+  cont.innerHTML = resultados.map((s, i) => `
+    <div class="merma-resultado-item" data-idx="${i}">
+      <span>${s.insumo}</span>
+      ${s.codigo ? `<span class="codigo">${s.codigo}</span>` : ''}
+    </div>
+  `).join('');
+  cont.classList.add('visible');
+  cont.querySelectorAll('.merma-resultado-item').forEach((el) => {
+    el.addEventListener('click', () => seleccionarInsumoMerma(resultados[Number(el.dataset.idx)]));
+  });
+}
+
+function seleccionarInsumoMerma(s) {
+  mermaInsumoSeleccionado = s.insumo;
+  const buscador = document.getElementById('merma-buscador');
+  const chip = document.getElementById('merma-seleccionado-chip');
+  buscador.value = '';
+  document.getElementById('merma-resultados').classList.remove('visible');
+  chip.style.display = 'flex';
+  chip.innerHTML = `${s.insumo} <button type="button" id="btn-quitar-merma-sel">✕</button>`;
+  document.getElementById('btn-quitar-merma-sel').addEventListener('click', () => {
+    mermaInsumoSeleccionado = null;
+    chip.style.display = 'none';
+    chip.innerHTML = '';
+    buscador.focus();
+  });
+  document.getElementById('merma-cantidad').focus();
+}
+
+const mermaBuscadorInput = document.getElementById('merma-buscador');
+mermaBuscadorInput.addEventListener('input', () => {
+  renderResultadosMerma(buscarInsumos(mermaBuscadorInput.value));
+});
+
+// Lector de código de barras: escanea el código y termina mandando "Enter"
+// -- si en ese momento hay resultados, se toma el primero automáticamente
+// (o el único, si el código calzó exacto con un solo insumo).
+mermaBuscadorInput.addEventListener('keydown', (e) => {
+  const resultados = buscarInsumos(mermaBuscadorInput.value);
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    mermaIndiceActivo = Math.min(mermaIndiceActivo + 1, resultados.length - 1);
+    marcarActivoMerma();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    mermaIndiceActivo = Math.max(mermaIndiceActivo - 1, 0);
+    marcarActivoMerma();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (!resultados.length) return;
+    const elegido = mermaIndiceActivo >= 0 ? resultados[mermaIndiceActivo] : resultados[0];
+    seleccionarInsumoMerma(elegido);
+  } else if (e.key === 'Escape') {
+    document.getElementById('merma-resultados').classList.remove('visible');
+  }
+});
+
+function marcarActivoMerma() {
+  document.querySelectorAll('.merma-resultado-item').forEach((el, i) => {
+    el.classList.toggle('activo', i === mermaIndiceActivo);
+  });
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.merma-buscador-wrap')) {
+    document.getElementById('merma-resultados').classList.remove('visible');
+  }
+});
+
 document.getElementById('btn-guardar-merma').addEventListener('click', async () => {
-  const insumo = document.getElementById('merma-insumo').value;
+  const insumo = mermaInsumoSeleccionado;
   const cantidad = Number(document.getElementById('merma-cantidad').value);
   const motivo = document.getElementById('merma-motivo').value.trim();
   const statusEl = document.getElementById('status-merma');
   if (!insumo || !(cantidad > 0)) {
-    statusEl.textContent = 'Elige un insumo e ingresa una cantidad válida.';
+    statusEl.textContent = 'Busca y elige un insumo, e ingresa una cantidad válida.';
     statusEl.className = 'status err';
     return;
   }
@@ -613,9 +743,13 @@ document.getElementById('btn-guardar-merma').addEventListener('click', async () 
     if (!json.ok) throw new Error(json.error || 'Error desconocido');
     document.getElementById('merma-cantidad').value = '';
     document.getElementById('merma-motivo').value = '';
+    mermaInsumoSeleccionado = null;
+    document.getElementById('merma-seleccionado-chip').style.display = 'none';
+    document.getElementById('merma-seleccionado-chip').innerHTML = '';
     statusEl.textContent = 'Merma registrada.';
     statusEl.className = 'status ok';
     await cargarStock();
+    document.getElementById('merma-buscador').focus();
   } catch (e) {
     statusEl.textContent = 'Error: ' + e.message;
     statusEl.className = 'status err';
@@ -1100,6 +1234,7 @@ function filaStock(r = {}) {
   const envaseTexto = r.tamanoEnvaseTexto ?? formatCantidad(r.tamanoEnvase ?? 1, r.unidadEnvase || 'un');
   tr.innerHTML = `
     <td><input type="text" data-field="insumo" value="${escapeAttr(r.insumo || '')}"></td>
+    <td><input type="text" data-field="codigo" placeholder="opcional" value="${escapeAttr(r.codigo || '')}"></td>
     <td><input type="number" step="1" min="0" data-field="diasElaboracion" value="${r.diasElaboracion ?? 0}"></td>
     <td><input type="text" data-field="tamanoEnvaseTexto" placeholder="1000 g / 1 un" value="${escapeAttr(envaseTexto)}"></td>
     <td><input type="number" step="0.1" data-field="stockMinimo" value="${r.stockMinimo ?? ''}"></td>
