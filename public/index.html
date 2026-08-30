@@ -82,6 +82,7 @@
   section.stock{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:20px;}
   section.stock h2{font-size:15px;margin:0 0 2px;}
   section.stock p.hint{color:var(--ink-soft);font-size:12.5px;margin:0 0 14px;}
+  .hint{color:var(--ink-soft);font-size:12.5px;margin:0 0 10px;}
   td input{width:100%;border:1px solid transparent;background:transparent;font-family:"JetBrains Mono",monospace;font-size:13px;padding:5px 6px;border-radius:6px;color:var(--ink);}
   td input:focus{outline:none;border-color:var(--accent);background:#F4FAFB;}
   td input[type="number"]{text-align:right;}
@@ -123,24 +124,63 @@
   .merma-buscador-wrap-grande .merma-resultados-dropdown{max-height:280px;}
   .merma-buscador-wrap-grande .merma-resultado-item{padding:14px;font-size:15px;}
 
-  .teclado-merma{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;}
-  .teclado-merma-producto{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-weight:700;font-size:15px;}
+  .teclado-overlay{
+    display:none;position:fixed;inset:0;background:rgba(20,24,28,0.45);
+    align-items:center;justify-content:center;z-index:1000;padding:16px;
+  }
+  .teclado-overlay.visible{display:flex;}
+  .teclado-card{
+    background:var(--panel);border-radius:16px;padding:20px;width:100%;max-width:340px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.25);
+  }
+  .teclado-card-header{
+    display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;margin-bottom:14px;
+  }
+  .teclado-card-header button{margin-left:auto;border:none;background:none;color:var(--ink-soft);font-size:18px;cursor:pointer;}
   .teclado-merma-display{
-    text-align:center;font-family:"JetBrains Mono",monospace;font-size:40px;font-weight:700;
-    padding:14px 0;color:var(--ink);border-bottom:1px dashed var(--line);margin-bottom:14px;
+    text-align:right;font-family:"JetBrains Mono",monospace;font-size:32px;font-weight:700;
+    padding:14px 16px;color:var(--ink);border:2px solid var(--accent);border-radius:10px;
+    margin-bottom:14px;background:#F4FAFB;
   }
   .teclado-merma-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
   .teclado-merma-grid button{
-    padding:18px 0;font-size:22px;font-weight:600;border:1px solid var(--line);border-radius:10px;
+    padding:16px 0;font-size:20px;font-weight:600;border:1px solid var(--line);border-radius:10px;
     background:#F7F8F9;color:var(--ink);cursor:pointer;
   }
   .teclado-merma-grid button:active{background:var(--accent);color:#fff;}
-  #merma-motivo{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:14px;margin-bottom:10px;}
-  #btn-guardar-merma{width:100%;padding:14px;font-size:15px;}
+  .teclado-merma-grid button.tecla-borrar{color:var(--danger);}
+  #merma-motivo{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:14px;margin-bottom:12px;box-sizing:border-box;}
+  .teclado-botones-final{display:flex;gap:10px;}
+  .teclado-botones-final button{flex:1;padding:13px 0;font-size:14px;font-weight:700;border-radius:10px;border:none;cursor:pointer;}
+  #btn-cancelar-merma{background:#EDEFF2;color:var(--ink);}
+  #btn-guardar-merma{background:var(--accent);color:#fff;}
   .merma-form select{flex:1;min-width:160px;border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-family:inherit;font-size:13px;background:#fff;}
   .merma-form input[type="text"]{flex:1;min-width:140px;}
   .merma-form input{border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-family:"JetBrains Mono",monospace;font-size:12.5px;background:#fff;}
   .merma-form input[type="number"]{width:100px;}
+  .calendario-header{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px;font-weight:700;font-size:14px;}
+  .calendario-header button{border:1px solid var(--line);background:var(--panel);border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer;}
+  .calendario-dias-semana{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:var(--ink-soft);margin-bottom:4px;}
+  .calendario-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .calendario-dia{
+    aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    border-radius:8px;font-size:13px;color:var(--ink-soft);position:relative;
+  }
+  .calendario-dia.vacio{visibility:hidden;}
+  .calendario-dia.con-mermas{
+    color:var(--ink);background:#F4FAFB;border:1px solid var(--line);cursor:pointer;font-weight:600;
+  }
+  .calendario-dia.con-mermas::after{
+    content:'';position:absolute;bottom:5px;width:5px;height:5px;border-radius:50%;background:var(--accent);
+  }
+  .calendario-dia.con-mermas:active{background:var(--accent);color:#fff;}
+  .calendario-dia.seleccionado{background:var(--accent);color:#fff;}
+  .calendario-dia.en-rango{background:#CFE4E8;color:var(--ink);}
+  .calendario-resumen-tabla{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+  .calendario-resumen-tabla th{text-align:left;font-size:10.5px;text-transform:uppercase;color:var(--ink-soft);border-bottom:1px solid var(--line);padding:5px;}
+  .calendario-resumen-tabla td{border-bottom:1px dashed var(--line);padding:6px 5px;font-family:"JetBrains Mono",monospace;font-size:12.5px;}
+  .calendario-resumen-tabla td.nombre{font-family:inherit;}
+  .calendario-resumen-tabla tfoot td{font-weight:700;border-bottom:none;border-top:1px solid var(--line);}
   .log-mermas{margin-top:12px;font-size:12px;color:var(--ink-soft);}
   .log-mermas div{padding:4px 0;border-bottom:1px dashed var(--line);}
   #loading-stock{color:var(--ink-soft);font-size:13px;padding:20px 0;}
@@ -160,7 +200,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.9</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.1</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -259,32 +299,53 @@
       <input type="text" id="merma-buscador" placeholder="Buscar o escanear código de barras..." autocomplete="off" autofocus>
       <div id="merma-resultados" class="merma-resultados-dropdown"></div>
     </div>
+  </section>
 
-    <!-- Paso 2: aparece al elegir un producto -- teclado numérico grande -->
-    <div class="teclado-merma" id="panel-cantidad-merma" style="display:none;">
-      <div class="teclado-merma-producto">
+  <!-- Overlay flotante: aparece al elegir un producto, sin tapar el buscador ni el historial de atrás -->
+  <div class="teclado-overlay" id="panel-cantidad-merma">
+    <div class="teclado-card">
+      <div class="teclado-card-header">
+        <span>🧮</span>
         <span id="teclado-merma-nombre"></span>
-        <button type="button" id="btn-cancelar-merma" class="chico">✕ Cambiar producto</button>
+        <button type="button" id="btn-cancelar-merma" title="Cerrar">✕</button>
       </div>
       <div class="teclado-merma-display" id="teclado-merma-display">0</div>
       <div class="teclado-merma-grid">
-        <button type="button" data-tecla="1">1</button>
-        <button type="button" data-tecla="2">2</button>
-        <button type="button" data-tecla="3">3</button>
-        <button type="button" data-tecla="4">4</button>
-        <button type="button" data-tecla="5">5</button>
-        <button type="button" data-tecla="6">6</button>
         <button type="button" data-tecla="7">7</button>
         <button type="button" data-tecla="8">8</button>
         <button type="button" data-tecla="9">9</button>
+        <button type="button" data-tecla="4">4</button>
+        <button type="button" data-tecla="5">5</button>
+        <button type="button" data-tecla="6">6</button>
+        <button type="button" data-tecla="1">1</button>
+        <button type="button" data-tecla="2">2</button>
+        <button type="button" data-tecla="3">3</button>
         <button type="button" data-tecla=".">,</button>
         <button type="button" data-tecla="0">0</button>
-        <button type="button" data-tecla="borrar">⌫</button>
+        <button type="button" class="tecla-borrar" data-tecla="borrar">⌫</button>
       </div>
       <input type="text" id="merma-motivo" placeholder="Motivo (opcional): se quemó, se cayó...">
-      <button class="save" id="btn-guardar-merma">Confirmar merma</button>
-      <span class="status" id="status-merma"></span>
+      <div class="teclado-botones-final">
+        <button type="button" id="btn-cancelar-merma-2">Cancelar</button>
+        <button type="button" id="btn-guardar-merma">✅ Confirmar merma</button>
+      </div>
+      <span class="status" id="status-merma" style="display:block;margin-top:8px;"></span>
     </div>
+  </div>
+
+  <section id="seccion-calendario-mermas" style="display:none;margin-top:20px;">
+    <h2>Calendario de mermas</h2>
+    <p class="hint">Los días con mermas aparecen marcados. Toca un día para ver el resumen de ese día; toca un segundo día para sumar todo el rango entre ambos.</p>
+    <div class="calendario-header">
+      <button type="button" class="chico" id="btn-mes-anterior">‹</button>
+      <span id="calendario-mes-titulo"></span>
+      <button type="button" class="chico" id="btn-mes-siguiente">›</button>
+    </div>
+    <div class="calendario-dias-semana">
+      <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+    </div>
+    <div class="calendario-grid" id="calendario-grid"></div>
+    <div id="calendario-resumen" style="margin-top:16px;"></div>
   </section>
 
   <section style="margin-top:20px;">
@@ -640,6 +701,7 @@ async function cargarStock() {
 }
 
 let itemsParaMerma = []; // insumos + productos + sabores, todo lo que se puede mermar
+let mermasCompletas = []; // historial completo (todas las fechas), para el calendario y el Excel
 
 async function cargarMermas() {
   const loading = document.getElementById('loading-mermas');
@@ -659,10 +721,14 @@ async function cargarMermas() {
     }
 
     itemsParaMerma = armarItemsParaMerma(resProductos, resCatalogo);
+    mermasCompletas = json.mermas || [];
 
     document.getElementById('seccion-mermas').style.display = 'block';
     renderLogMermas(json.mermasHoy || []);
     document.getElementById('merma-buscador').focus();
+
+    document.getElementById('seccion-calendario-mermas').style.display = 'block';
+    renderCalendarioMermas();
   } catch (e) {
     loading.style.display = 'block';
     loading.textContent = 'Error de conexión: ' + e.message;
@@ -835,6 +901,131 @@ function renderLogMermas(mermasHoy) {
   }).join('');
 }
 
+// ===================== CALENDARIO DE MERMAS =====================
+const MESES_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+let calendarioMesActual = new Date(); // mes que se está mostrando
+let calSeleccionInicio = null; // 'YYYY-MM-DD'
+let calSeleccionFin = null;
+
+function fechaISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function diasConMermas() {
+  return new Set(mermasCompletas.map((m) => (m.fecha || '').slice(0, 10)));
+}
+
+function renderCalendarioMermas() {
+  const dias = diasConMermas();
+  const anio = calendarioMesActual.getFullYear();
+  const mes = calendarioMesActual.getMonth();
+
+  document.getElementById('calendario-mes-titulo').textContent = `${MESES_ES[mes]} ${anio}`;
+
+  // Lunes=0 ... Domingo=6 (para que la grilla calce con el header L M M J V S D)
+  const primerDiaSemana = (new Date(anio, mes, 1).getDay() + 6) % 7;
+  const diasEnMes = new Date(anio, mes + 1, 0).getDate();
+
+  const celdas = [];
+  for (let i = 0; i < primerDiaSemana; i++) celdas.push(null);
+  for (let d = 1; d <= diasEnMes; d++) celdas.push(d);
+
+  const grid = document.getElementById('calendario-grid');
+  grid.innerHTML = celdas.map((d) => {
+    if (d === null) return '<div class="calendario-dia vacio"></div>';
+    const iso = fechaISO(new Date(anio, mes, d));
+    const tieneMermas = dias.has(iso);
+    let clases = 'calendario-dia';
+    if (tieneMermas) clases += ' con-mermas';
+    if (calSeleccionInicio && iso === calSeleccionInicio) clases += ' seleccionado';
+    if (calSeleccionFin && iso === calSeleccionFin) clases += ' seleccionado';
+    if (calSeleccionInicio && calSeleccionFin) {
+      const [ini, fin] = [calSeleccionInicio, calSeleccionFin].sort();
+      if (iso > ini && iso < fin) clases += ' en-rango';
+    }
+    return `<div class="${clases}" data-fecha="${tieneMermas ? iso : ''}">${d}</div>`;
+  }).join('');
+
+  grid.querySelectorAll('.calendario-dia.con-mermas').forEach((el) => {
+    el.addEventListener('click', () => clickDiaCalendario(el.dataset.fecha));
+  });
+
+  renderResumenCalendario();
+}
+
+function clickDiaCalendario(iso) {
+  if (!calSeleccionInicio || (calSeleccionInicio && calSeleccionFin)) {
+    // empieza selección nueva
+    calSeleccionInicio = iso;
+    calSeleccionFin = null;
+  } else if (iso === calSeleccionInicio) {
+    // tocar el mismo día de nuevo: deja solo ese día seleccionado
+    calSeleccionFin = null;
+  } else {
+    calSeleccionFin = iso;
+  }
+  renderCalendarioMermas();
+}
+
+document.getElementById('btn-mes-anterior').addEventListener('click', () => {
+  calendarioMesActual = new Date(calendarioMesActual.getFullYear(), calendarioMesActual.getMonth() - 1, 1);
+  renderCalendarioMermas();
+});
+document.getElementById('btn-mes-siguiente').addEventListener('click', () => {
+  calendarioMesActual = new Date(calendarioMesActual.getFullYear(), calendarioMesActual.getMonth() + 1, 1);
+  renderCalendarioMermas();
+});
+
+function renderResumenCalendario() {
+  const cont = document.getElementById('calendario-resumen');
+  if (!calSeleccionInicio) {
+    cont.innerHTML = '<p class="hint">Toca un día marcado para ver el resumen.</p>';
+    return;
+  }
+  const [ini, fin] = calSeleccionFin ? [calSeleccionInicio, calSeleccionFin].sort() : [calSeleccionInicio, calSeleccionInicio];
+
+  const mermasEnRango = mermasCompletas.filter((m) => {
+    const f = (m.fecha || '').slice(0, 10);
+    return f >= ini && f <= fin;
+  });
+
+  const titulo = ini === fin
+    ? `Mermas del ${formatoFechaLarga(ini)}`
+    : `Mermas del ${formatoFechaLarga(ini)} al ${formatoFechaLarga(fin)}`;
+
+  if (!mermasEnRango.length) {
+    cont.innerHTML = `<h3 style="font-size:13px;margin:0 0 8px;">${titulo}</h3><p class="hint">Sin mermas en ese rango.</p>`;
+    return;
+  }
+
+  const agrupado = new Map();
+  mermasEnRango.forEach((m) => {
+    const info = infoParaExportarMerma(m);
+    const key = info.nombre;
+    const e = agrupado.get(key) || { ...info, cantidad: 0 };
+    e.cantidad += Number(m.cantidad) || 0;
+    agrupado.set(key, e);
+  });
+  const filas = [...agrupado.values()].sort((a, b) => b.cantidad - a.cantidad);
+  const total = filas.reduce((acc, f) => acc + f.cantidad, 0);
+
+  cont.innerHTML = `
+    <h3 style="font-size:13px;margin:0 0 8px;">${titulo}</h3>
+    <table class="calendario-resumen-tabla">
+      <thead><tr><th>Producto</th><th>Categoría</th><th style="text-align:right;">Cantidad</th></tr></thead>
+      <tbody>
+        ${filas.map((f) => `<tr><td class="nombre">${escapeAttr(f.nombre)}</td><td class="nombre">${escapeAttr(f.categoria || '')}</td><td style="text-align:right;">${f.cantidad}</td></tr>`).join('')}
+      </tbody>
+      <tfoot><tr><td colspan="2">Total</td><td style="text-align:right;">${total}</td></tr></tfoot>
+    </table>
+  `;
+}
+
+function formatoFechaLarga(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${d} de ${MESES_ES[m - 1].toLowerCase()}`;
+}
+
 async function recontarInsumo(insumo) {
   const actual = stockData.find((s) => s.insumo === insumo);
   const nuevo = prompt(`Conteo real de "${insumo}"${actual ? ' (' + actual.unidadEnvase + ')' : ''}:`, actual ? actual.stockCalculado : '');
@@ -901,8 +1092,7 @@ function renderResultadosMerma(resultados) {
 function seleccionarInsumoMerma(s) {
   mermaItemSeleccionado = s;
   document.getElementById('merma-resultados').classList.remove('visible');
-  document.getElementById('paso-buscar-merma').style.display = 'none';
-  document.getElementById('panel-cantidad-merma').style.display = 'block';
+  document.getElementById('panel-cantidad-merma').classList.add('visible');
   document.getElementById('teclado-merma-nombre').textContent = s.nombre;
   tecladoValor = '0';
   actualizarDisplayTeclado();
@@ -912,14 +1102,14 @@ function seleccionarInsumoMerma(s) {
 
 function volverABuscarMerma() {
   mermaItemSeleccionado = null;
-  document.getElementById('panel-cantidad-merma').style.display = 'none';
-  document.getElementById('paso-buscar-merma').style.display = 'block';
+  document.getElementById('panel-cantidad-merma').classList.remove('visible');
   const buscador = document.getElementById('merma-buscador');
   buscador.value = '';
   buscador.focus();
 }
 
 document.getElementById('btn-cancelar-merma').addEventListener('click', volverABuscarMerma);
+document.getElementById('btn-cancelar-merma-2').addEventListener('click', volverABuscarMerma);
 
 const mermaBuscadorInput = document.getElementById('merma-buscador');
 mermaBuscadorInput.addEventListener('input', () => {
