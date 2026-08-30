@@ -160,7 +160,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.8</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.9</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -288,7 +288,10 @@
   </section>
 
   <section style="margin-top:20px;">
-    <h2>Historial de mermas de hoy</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;">Historial de mermas de hoy</h2>
+      <button class="add" id="btn-descargar-mermas">📥 Descargar historial completo (Excel)</button>
+    </div>
     <div class="log-mermas" id="log-mermas"></div>
   </section>
 </div>
@@ -668,22 +671,30 @@ async function cargarMermas() {
 
 // Junta en una sola lista buscable: insumos de fábrica (mermas directas) +
 // productos vendidos recientes + catálogo completo (para que aparezcan
-// también los de baja rotación, como "Bagel Huevo Queso").
+// también los de baja rotación, como "Bagel Huevo Queso"). De paso arma
+// categoriaPorClaveMerma, para poder mostrar la categoría en el Excel
+// exportado sin tener que volver a consultar nada.
+let categoriaPorClaveMerma = new Map();
+
 function armarItemsParaMerma(resProductos, resCatalogo) {
   const items = [];
   const vistos = new Set(); // evita duplicados por código
+  categoriaPorClaveMerma = new Map();
 
   stockData.forEach((s) => {
     items.push({ tipo: 'insumo', nombre: s.insumo, codigo: s.codigo || '', insumo: s.insumo });
+    categoriaPorClaveMerma.set('insumo:' + s.insumo, 'Insumo de fábrica');
   });
 
-  const agregarProducto = (nombre, codigo) => {
+  const agregarProducto = (nombre, codigo, categoria) => {
     const key = 'p:' + codigo;
     if (codigo && vistos.has(key)) return;
     if (codigo) vistos.add(key);
     items.push({ tipo: 'producto', nombre, codigo: codigo || '', producto: nombre, codigoProducto: codigo || null });
+    if (codigo) categoriaPorClaveMerma.set('producto:' + codigo, categoria);
+    categoriaPorClaveMerma.set('producto:' + nombre, categoria);
   };
-  const agregarSabor = (base, token, codigoBase, patronCodigo) => {
+  const agregarSabor = (base, token, codigoBase, patronCodigo, categoria) => {
     const key = 'ps:' + codigoBase + '|' + patronCodigo;
     if (codigoBase && patronCodigo && vistos.has(key)) return;
     if (codigoBase && patronCodigo) vistos.add(key);
@@ -696,26 +707,101 @@ function armarItemsParaMerma(resProductos, resCatalogo) {
       codigoBase: codigoBase || null,
       patronCodigo: patronCodigo || null,
     });
+    if (patronCodigo) categoriaPorClaveMerma.set('sabor:' + patronCodigo, categoria);
+    categoriaPorClaveMerma.set('sabor:' + base + '|||' + token, categoria);
   };
 
   (resProductos.ok ? resProductos.categorias : []).forEach((cat) => {
-    (cat.productos || []).forEach((p) => agregarProducto(p.producto, p.codigo));
+    (cat.productos || []).forEach((p) => agregarProducto(p.producto, p.codigo, cat.categoria));
     (cat.familias || []).forEach((fam) => {
-      fam.tokens.forEach((tok) => agregarSabor(fam.base, tok.token, fam.codigoBase, tok.codigo));
+      fam.tokens.forEach((tok) => agregarSabor(fam.base, tok.token, fam.codigoBase, tok.codigo, cat.categoria));
     });
   });
 
   (resCatalogo.ok ? resCatalogo.categorias : []).forEach((cat) => {
     (cat.productos || []).forEach((p) => {
-      agregarProducto(p.producto, p.codigo);
+      agregarProducto(p.producto, p.codigo, cat.categoria);
       (p.gruposVariantes || []).forEach((grupo) => {
-        grupo.opciones.forEach((op) => agregarSabor(p.producto, op.nombre, p.codigo, op.codigo));
+        grupo.opciones.forEach((op) => agregarSabor(p.producto, op.nombre, p.codigo, op.codigo, cat.categoria));
       });
     });
   });
 
   return items;
 }
+
+// Arma { nombre, codigo, categoria } para una entrada de merma guardada,
+// usando el mismo índice que ya se armó para el buscador.
+function infoParaExportarMerma(m) {
+  if (m.tipo === 'producto-sabor') {
+    const nombre = `${m.producto} (${m.patronToken})`;
+    const categoria = categoriaPorClaveMerma.get('sabor:' + (m.patronCodigo || '')) ||
+      categoriaPorClaveMerma.get('sabor:' + m.producto + '|||' + m.patronToken) || '';
+    return { nombre, codigo: m.patronCodigo || '', categoria };
+  }
+  if (m.tipo === 'producto') {
+    const categoria = categoriaPorClaveMerma.get('producto:' + (m.codigoProducto || '')) ||
+      categoriaPorClaveMerma.get('producto:' + m.producto) || '';
+    return { nombre: m.producto, codigo: m.codigoProducto || '', categoria };
+  }
+  const infoStock = stockData.find((s) => s.insumo === m.insumo);
+  return { nombre: m.insumo, codigo: (infoStock && infoStock.codigo) || '', categoria: 'Insumo de fábrica' };
+}
+
+// Excel con 2 pestañas: "Resumen por día" (si el mismo producto se mermó
+// varias veces el mismo día, se suma en una sola fila) y "Detalle" (una
+// fila por cada merma registrada, con hora exacta).
+document.getElementById('btn-descargar-mermas').addEventListener('click', async () => {
+  const statusEl = document.getElementById('status-merma') || document.getElementById('status');
+  try {
+    const res = await fetch('/.netlify/functions/stock-cafeteria');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+    const mermas = json.mermas || [];
+    if (!mermas.length) {
+      alert('No hay mermas registradas todavía para exportar.');
+      return;
+    }
+
+    const detalle = mermas.map((m) => {
+      const info = infoParaExportarMerma(m);
+      return {
+        'Producto': info.nombre,
+        'Código': info.codigo,
+        'Categoría': info.categoria,
+        'Cantidad mermada': m.cantidad,
+        'Fecha': (m.fecha || '').slice(0, 10),
+        'Hora': (m.fecha || '').slice(11, 16),
+        'Motivo': m.motivo || '',
+      };
+    }).sort((a, b) => (b.Fecha + b.Hora).localeCompare(a.Fecha + a.Hora));
+
+    const agrupado = new Map();
+    detalle.forEach((f) => {
+      const key = f['Producto'] + '|||' + f['Fecha'];
+      if (!agrupado.has(key)) {
+        agrupado.set(key, { 'Producto': f['Producto'], 'Código': f['Código'], 'Categoría': f['Categoría'], 'Cantidad mermada': 0, 'Día': f['Fecha'] });
+      }
+      agrupado.get(key)['Cantidad mermada'] += f['Cantidad mermada'];
+    });
+    const resumen = [...agrupado.values()].sort((a, b) => b['Día'].localeCompare(a['Día']) || a['Producto'].localeCompare(b['Producto']));
+
+    const libro = XLSX.utils.book_new();
+
+    const hojaResumen = XLSX.utils.json_to_sheet(resumen, { header: ['Producto', 'Código', 'Categoría', 'Cantidad mermada', 'Día'] });
+    hojaResumen['!cols'] = [{ wch: 32 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen por día');
+
+    const hojaDetalle = XLSX.utils.json_to_sheet(detalle, { header: ['Producto', 'Código', 'Categoría', 'Cantidad mermada', 'Fecha', 'Hora', 'Motivo'] });
+    hojaDetalle['!cols'] = [{ wch: 32 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 8 }, { wch: 26 }];
+    XLSX.utils.book_append_sheet(libro, hojaDetalle, 'Detalle');
+
+    const fechaHoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(libro, `historial-mermas-${fechaHoy}.xlsx`);
+  } catch (e) {
+    alert('No se pudo generar el Excel: ' + e.message);
+  }
+});
 
 function renderStockCalculado() {
   const tbody = document.getElementById('tbody-stock-calculado');
