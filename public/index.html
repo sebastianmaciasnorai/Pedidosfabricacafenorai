@@ -160,7 +160,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.6</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.7</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -306,6 +306,7 @@
       <button class="add" id="btn-expandir-todo">Expandir todas</button>
       <button class="add" id="btn-descargar-excel">⬇️ Descargar Excel</button>
       <button class="add" id="btn-subir-excel">⬆️ Subir Excel</button>
+      <button class="add" id="btn-actualizar-catalogo">🔄 Traer productos no vendidos (catálogo)</button>
       <input type="file" id="input-excel" accept=".xlsx,.xls" style="display:none">
     </div>
   </div>
@@ -1338,6 +1339,70 @@ function aplicarFilasExcel(filas) {
 
 document.getElementById('btn-subir-excel').addEventListener('click', () => {
   document.getElementById('input-excel').click();
+});
+
+// Trae el catálogo COMPLETO de Toteat (se haya vendido o no) y agrega a
+// `categorias` cualquier producto o sabor/variante que todavía no exista
+// (por código) -- así productos de baja rotación quedan disponibles para
+// marcar en Recetas, sin duplicar ni pisar lo que ya vino de las ventas.
+document.getElementById('btn-actualizar-catalogo').addEventListener('click', async () => {
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'Consultando catálogo completo en Toteat...';
+  statusEl.className = 'status';
+  try {
+    const res = await fetch('/.netlify/functions/productos-catalogo');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+
+    let productosNuevos = 0;
+    let saboresNuevos = 0;
+
+    json.categorias.forEach((catCatalogo) => {
+      let cat = categorias.find((c) => c.categoria === catCatalogo.categoria);
+      if (!cat) {
+        cat = { categoria: catCatalogo.categoria, productos: [], familias: [] };
+        categorias.push(cat);
+      }
+      if (!cat.familias) cat.familias = [];
+
+      catCatalogo.productos.forEach((pCatalogo) => {
+        const yaExiste = cat.productos.some((p) => p.codigo === pCatalogo.codigo);
+        if (!yaExiste) {
+          cat.productos.push({
+            producto: pCatalogo.producto,
+            unidadesVendidas: 0,
+            ventaTotal: 0,
+            precioUnitario: pCatalogo.precioBase,
+            codigo: pCatalogo.codigo,
+            variantes: [],
+          });
+          productosNuevos++;
+        }
+
+        pCatalogo.gruposVariantes.forEach((grupo) => {
+          let fam = cat.familias.find((f) => f.codigoBase === pCatalogo.codigo);
+          if (!fam) {
+            fam = { base: pCatalogo.producto, codigoBase: pCatalogo.codigo, tokens: [] };
+            cat.familias.push(fam);
+          }
+          grupo.opciones.forEach((op) => {
+            const yaExisteToken = fam.tokens.some((t) => t.codigo === op.codigo);
+            if (!yaExisteToken) {
+              fam.tokens.push({ token: op.nombre, codigo: op.codigo, unidadesVendidas: 0, ventaTotal: 0 });
+              saboresNuevos++;
+            }
+          });
+        });
+      });
+    });
+
+    renderCategorias(document.getElementById('buscador').value);
+    statusEl.textContent = `Catálogo actualizado: ${productosNuevos} producto(s) nuevo(s), ${saboresNuevos} sabor(es)/variante(s) nuevo(s) agregados (no vendidos recientemente). Ya puedes marcarlos.`;
+    statusEl.className = 'status ok';
+  } catch (e) {
+    statusEl.textContent = 'Error consultando el catálogo: ' + e.message;
+    statusEl.className = 'status err';
+  }
 });
 
 document.getElementById('input-excel').addEventListener('change', async (e) => {
