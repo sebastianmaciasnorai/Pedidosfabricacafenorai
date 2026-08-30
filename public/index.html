@@ -118,7 +118,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.1</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.2</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -490,7 +490,7 @@ async function cargarFabricar() {
       if (it.necesitaProducir) tr.classList.add('bajo-minimo');
       tr.innerHTML = `
         <td class="nombre">${it.insumo}</td>
-        <td class="num">${it.diaSemanaObjetivo} ${it.fechaObjetivo} <span style="color:var(--ink-soft);">(+${it.diasElaboracion}d)</span></td>
+        <td class="num">${it.diaSemanaDespacho} ${it.fechaDespacho} <span style="color:var(--ink-soft);">(${it.diasElaboracion}d hábiles)</span></td>
         <td class="num">${it.ventaPromedioProyectada}</td>
         <td class="num">${it.stockActual}</td>
         <td class="num">${it.stockMinimo}</td>
