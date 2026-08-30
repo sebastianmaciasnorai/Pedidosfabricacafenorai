@@ -118,7 +118,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café</h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.0</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -149,6 +149,7 @@
           <th class="num">Stock proyectado</th>
           <th class="num">Mínimo</th>
           <th class="num">Pedir a fábrica</th>
+          <th class="num">Estado</th>
         </tr>
       </thead>
       <tbody id="tbody-detalle"></tbody>
@@ -361,6 +362,7 @@ tabButtons.forEach((btn) => {
         detalle.forEach((d) => {
           const tr = document.createElement('tr');
           if (d.bajoMinimo) tr.classList.add('bajo-minimo');
+          const estado = calcularEstadoSemaforo(d);
           tr.innerHTML = `
             <td class="nombre">${d.insumo}${d.tamanoEnvase > 1 ? ` <span style="color:var(--ink-soft);font-size:11px;">(envase = ${d.tamanoEnvase})</span>` : ''}</td>
             <td class="num">${d.necesidadHoyUnidadReceta}</td>
@@ -371,6 +373,7 @@ tabButtons.forEach((btn) => {
             <td class="num">${d.sugeridoPedirAFabrica > 0
               ? `<span class="pill pedir">${d.sugeridoPedirAFabrica}</span>`
               : `<span class="pill ok">—</span>`}</td>
+            <td class="num">${estado.emoji} ${estado.texto}</td>
           `;
           tbody.appendChild(tr);
         });
@@ -437,6 +440,20 @@ tabButtons.forEach((btn) => {
   });
 
   cargar();
+
+  // Semáforo visual: rojo = ya se va a quedar en 0 o negativo hoy;
+  // amarillo = queda bajo el mínimo pero todavía no en cero; verde = stock
+  // se mantiene sobre el mínimo. Mismo criterio que un control de
+  // inventario clásico con "colchón" de seguridad.
+  function calcularEstadoSemaforo(d) {
+    if (d.stockProyectadoFinDia <= 0) {
+      return { emoji: '🔴', texto: 'Quiebre inminente' };
+    }
+    if (d.bajoMinimo) {
+      return { emoji: '🟡', texto: 'Hacer pedido' };
+    }
+    return { emoji: '🟢', texto: 'Stock óptimo' };
+  }
 })();
 
 // ===================== POR EMPEZAR A FABRICAR =====================
