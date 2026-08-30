@@ -136,7 +136,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.4</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v2.5</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -1111,11 +1111,13 @@ document.getElementById('btn-expandir-todo').addEventListener('click', () => {
 // producto ya tiene insumos marcados, se repite una fila por cada insumo.
 // Así el archivo se puede editar afuera y volver a subir para marcar/
 // desmarcar productos de fábrica mucho más rápido que clic a clic aquí.
-function filasParaExcelProducto(cat, nombreProducto, variante, entradas, unidadesVendidas) {
+function filasParaExcelProducto(cat, nombreProducto, variante, codigoProducto, codigoVariante, entradas, unidadesVendidas) {
   const base = {
     'Categoría': cat.categoria,
     'Producto': nombreProducto,
     'Variante': variante || '',
+    'Código Producto': codigoProducto || '',
+    'Código Variante': codigoVariante || '',
     'Unidades vendidas (7 días)': unidadesVendidas,
   };
   if (entradas && entradas.length) {
@@ -1132,12 +1134,12 @@ function generarFilasExcel() {
   const filas = [];
   categorias.forEach((cat) => {
     cat.productos.forEach((p) => {
-      filas.push(...filasParaExcelProducto(cat, p.producto, '', mapaInsumos[p.producto], p.unidadesVendidas));
+      filas.push(...filasParaExcelProducto(cat, p.producto, '', p.codigo, '', mapaInsumos[p.producto], p.unidadesVendidas));
     });
     (cat.familias || []).forEach((fam) => {
       fam.tokens.forEach((tok) => {
         const key = fam.base + '|||' + tok.token;
-        filas.push(...filasParaExcelProducto(cat, fam.base, tok.token, mapaPatrones[key], tok.unidadesVendidas));
+        filas.push(...filasParaExcelProducto(cat, fam.base, tok.token, fam.codigoBase, tok.codigo, mapaPatrones[key], tok.unidadesVendidas));
       });
     });
   });
@@ -1150,9 +1152,9 @@ document.getElementById('btn-descargar-excel').addEventListener('click', () => {
     return;
   }
   const filas = generarFilasExcel();
-  const columnas = ['Categoría', 'Producto', 'Variante', 'Contiene producto de fábrica', 'Insumo', 'Cantidad', 'Unidades vendidas (7 días)'];
+  const columnas = ['Categoría', 'Producto', 'Variante', 'Código Producto', 'Código Variante', 'Contiene producto de fábrica', 'Insumo', 'Cantidad', 'Unidades vendidas (7 días)'];
   const hoja = XLSX.utils.json_to_sheet(filas, { header: columnas });
-  hoja['!cols'] = [{ wch: 16 }, { wch: 34 }, { wch: 18 }, { wch: 16 }, { wch: 34 }, { wch: 12 }, { wch: 14 }];
+  hoja['!cols'] = [{ wch: 16 }, { wch: 34 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 34 }, { wch: 12 }, { wch: 14 }];
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, hoja, 'Recetas y stock');
   const fechaHoy = new Date().toISOString().slice(0, 10);
@@ -1171,11 +1173,38 @@ function esSi(valor) {
 // archivo queda tal cual estaba -- así no hace falta exportar/reimportar
 // todo cada vez.
 function aplicarFilasExcel(filas) {
+  // Índices por código: permiten encontrar el producto/sabor ACTUAL aunque
+  // el texto del Excel tenga un typo, acento distinto o mayúscula distinta
+  // -- mientras el código coincida, se usa el nombre correcto de verdad.
+  const productoPorCodigo = new Map(); // codigo -> nombre actual del producto
+  const patronPorCodigos = new Map();  // "codigoBase|||codigoVariante" -> {base, token}
+  categorias.forEach((cat) => {
+    cat.productos.forEach((p) => { if (p.codigo) productoPorCodigo.set(p.codigo, p.producto); });
+    (cat.familias || []).forEach((fam) => {
+      fam.tokens.forEach((tok) => {
+        if (fam.codigoBase && tok.codigo) {
+          patronPorCodigos.set(fam.codigoBase + '|||' + tok.codigo, { base: fam.base, token: tok.token });
+        }
+      });
+    });
+  });
+
   const grupos = new Map();
   filas.forEach((fila) => {
-    const producto = String(fila['Producto'] || '').trim();
+    let producto = String(fila['Producto'] || '').trim();
+    let variante = String(fila['Variante'] || '').trim();
+    const codigoProducto = String(fila['Código Producto'] || '').trim();
+    const codigoVariante = String(fila['Código Variante'] || '').trim();
+
+    if (codigoVariante && codigoProducto && patronPorCodigos.has(codigoProducto + '|||' + codigoVariante)) {
+      const info = patronPorCodigos.get(codigoProducto + '|||' + codigoVariante);
+      producto = info.base;
+      variante = info.token;
+    } else if (!variante && codigoProducto && productoPorCodigo.has(codigoProducto)) {
+      producto = productoPorCodigo.get(codigoProducto);
+    }
+
     if (!producto) return;
-    const variante = String(fila['Variante'] || '').trim();
     const key = (variante ? 'patron:' : 'prod:') + producto + '|||' + variante;
     if (!grupos.has(key)) grupos.set(key, { producto, variante, contiene: false, entradas: [] });
     const grupo = grupos.get(key);
@@ -1384,9 +1413,32 @@ function leerStockTabla() {
   }).filter((o) => o.insumo);
 }
 
+// Busca el código actual de un producto/sabor en la lista viva de
+// categorías -- se usa al guardar, para que cada receta quede con su
+// código (match robusto) además del texto (para mostrar en pantalla).
+function buscarCodigoProducto(nombreProducto) {
+  for (const cat of categorias) {
+    const p = (cat.productos || []).find((x) => x.producto === nombreProducto);
+    if (p && p.codigo) return p.codigo;
+  }
+  return null;
+}
+
+function buscarInfoPatron(base, token) {
+  for (const cat of categorias) {
+    const fam = (cat.familias || []).find((f) => f.base === base);
+    if (fam) {
+      const tok = fam.tokens.find((t) => t.token === token);
+      if (tok) return { codigoBase: fam.codigoBase, patronCodigo: tok.codigo };
+    }
+  }
+  return { codigoBase: null, patronCodigo: null };
+}
+
 function leerRecetas() {
   const recetas = [];
   Object.entries(mapaInsumos).forEach(([producto, filas]) => {
+    const codigoProducto = buscarCodigoProducto(producto);
     const filasValidas = [];
     filas.forEach((f) => {
       if (!f.insumo) return;
@@ -1396,14 +1448,15 @@ function leerRecetas() {
       }
     });
     if (filasValidas.length > 0) {
-      filasValidas.forEach((f) => recetas.push({ producto, insumo: f.insumo, cantidadPorUnidad: f.cantidadPorUnidad, unidad: f.unidad }));
+      filasValidas.forEach((f) => recetas.push({ producto, codigoProducto, insumo: f.insumo, cantidadPorUnidad: f.cantidadPorUnidad, unidad: f.unidad }));
     } else {
-      recetas.push({ producto, insumo: producto, cantidadPorUnidad: 1, unidad: 'un' });
+      recetas.push({ producto, codigoProducto, insumo: producto, cantidadPorUnidad: 1, unidad: 'un' });
     }
   });
 
   Object.entries(mapaPatrones).forEach(([key, filas]) => {
     const [base, token] = key.split('|||');
+    const { codigoBase, patronCodigo } = buscarInfoPatron(base, token);
     const filasValidas = [];
     filas.forEach((f) => {
       if (!f.insumo) return;
@@ -1413,12 +1466,12 @@ function leerRecetas() {
       }
     });
     if (filasValidas.length > 0) {
-      filasValidas.forEach((f) => recetas.push({ producto: base, patronToken: token, insumo: f.insumo, cantidadPorUnidad: f.cantidadPorUnidad, unidad: f.unidad }));
+      filasValidas.forEach((f) => recetas.push({ producto: base, patronToken: token, codigoBase, patronCodigo, insumo: f.insumo, cantidadPorUnidad: f.cantidadPorUnidad, unidad: f.unidad }));
     } else {
       // Marcado "Sí" sin insumo -> esa variante/sabor completa viene de
       // fábrica. Usamos "base (sabor)" como nombre del insumo para no
       // mezclar distintos sabores de la misma familia bajo un solo nombre.
-      recetas.push({ producto: base, patronToken: token, insumo: `${base} (${token})`, cantidadPorUnidad: 1, unidad: 'un' });
+      recetas.push({ producto: base, patronToken: token, codigoBase, patronCodigo, insumo: `${base} (${token})`, cantidadPorUnidad: 1, unidad: 'un' });
     }
   });
 
