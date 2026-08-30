@@ -200,7 +200,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.1</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.2</span></h1>
   <div class="tabs">
     <button class="tab-btn activo" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -333,19 +333,21 @@
     </div>
   </div>
 
-  <section id="seccion-calendario-mermas" style="display:none;margin-top:20px;">
-    <h2>Calendario de mermas</h2>
-    <p class="hint">Los días con mermas aparecen marcados. Toca un día para ver el resumen de ese día; toca un segundo día para sumar todo el rango entre ambos.</p>
-    <div class="calendario-header">
-      <button type="button" class="chico" id="btn-mes-anterior">‹</button>
-      <span id="calendario-mes-titulo"></span>
-      <button type="button" class="chico" id="btn-mes-siguiente">›</button>
+  <section id="seccion-calendario-mermas" style="display:none;margin-top:16px;">
+    <button type="button" class="add" id="btn-toggle-calendario">📅 Calendario de mermas</button>
+    <div id="calendario-panel" style="display:none;margin-top:12px;">
+      <p class="hint">Los días con mermas aparecen marcados. Toca un día para ver el resumen de ese día; toca un segundo día para sumar todo el rango entre ambos.</p>
+      <div class="calendario-header">
+        <button type="button" class="chico" id="btn-mes-anterior">‹</button>
+        <span id="calendario-mes-titulo"></span>
+        <button type="button" class="chico" id="btn-mes-siguiente">›</button>
+      </div>
+      <div class="calendario-dias-semana">
+        <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+      </div>
+      <div class="calendario-grid" id="calendario-grid"></div>
+      <div id="calendario-resumen" style="margin-top:16px;"></div>
     </div>
-    <div class="calendario-dias-semana">
-      <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
-    </div>
-    <div class="calendario-grid" id="calendario-grid"></div>
-    <div id="calendario-resumen" style="margin-top:16px;"></div>
   </section>
 
   <section style="margin-top:20px;">
@@ -728,7 +730,6 @@ async function cargarMermas() {
     document.getElementById('merma-buscador').focus();
 
     document.getElementById('seccion-calendario-mermas').style.display = 'block';
-    renderCalendarioMermas();
   } catch (e) {
     loading.style.display = 'block';
     loading.textContent = 'Error de conexión: ' + e.message;
@@ -914,6 +915,13 @@ function fechaISO(d) {
 function diasConMermas() {
   return new Set(mermasCompletas.map((m) => (m.fecha || '').slice(0, 10)));
 }
+
+document.getElementById('btn-toggle-calendario').addEventListener('click', () => {
+  const panel = document.getElementById('calendario-panel');
+  const abrir = panel.style.display === 'none';
+  panel.style.display = abrir ? 'block' : 'none';
+  if (abrir) renderCalendarioMermas();
+});
 
 function renderCalendarioMermas() {
   const dias = diasConMermas();
