@@ -210,7 +210,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.8</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.9</span></h1>
   <div class="tabs">
     <button class="tab-btn" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -348,7 +348,7 @@
       <button type="button" class="add" id="btn-toggle-calendario">📅 Calendario de mermas</button>
     </div>
     <div id="calendario-panel" class="calendario-flotante" style="display:none;">
-      <p class="hint">Los días con mermas aparecen marcados. Toca un día para ver el resumen de ese día; toca un segundo día para sumar todo el rango entre ambos.</p>
+      <p class="hint">Los días con mermas aparecen marcados. Toca un día para elegirlo; toca un segundo día para elegir un rango entre ambos.</p>
       <div class="calendario-caja">
         <div class="calendario-header">
           <button type="button" class="chico" id="btn-mes-anterior">‹</button>
@@ -360,14 +360,19 @@
         </div>
         <div class="calendario-grid" id="calendario-grid"></div>
       </div>
-      <div id="calendario-resumen" style="margin-top:16px;"></div>
+      <div id="calendario-seleccion" style="margin-top:12px;font-size:13px;color:var(--ink-soft);">Toca un día marcado para elegirlo.</div>
+      <button type="button" class="save" id="btn-buscar-calendario" style="width:100%;margin-top:8px;" disabled>Buscar</button>
+      <div id="calendario-error" class="status err" style="display:none;margin-top:8px;"></div>
     </div>
   </section>
 
   <section style="margin-top:20px;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-      <h2 style="margin:0;">Historial de mermas de hoy</h2>
-      <button class="add" id="btn-descargar-mermas">📥 Descargar historial completo (Excel)</button>
+      <h2 style="margin:0;" id="historial-titulo">Historial de mermas de hoy</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="chico" id="btn-historial-hoy" style="display:none;">↺ Ver hoy</button>
+        <button class="add" id="btn-descargar-mermas">📥 Descargar historial completo (Excel)</button>
+      </div>
     </div>
     <div class="log-mermas" id="log-mermas"></div>
   </section>
@@ -818,10 +823,11 @@ function aplicarDatosMermas(datos) {
   itemsParaMerma = datos.itemsParaMerma || [];
   mermasCompletas = datos.mermasCompletas || [];
   categoriaPorClaveMerma = new Map(datos.categoriaPorClaveMerma || []);
+  mermasHoyActual = datos.mermasHoy || [];
 
   document.getElementById('seccion-mermas').style.display = 'block';
   document.getElementById('seccion-calendario-mermas').style.display = 'block';
-  renderLogMermas(datos.mermasHoy || []);
+  renderLogMermas(mermasHoyActual);
 
   // Si el calendario ya estaba abierto (dato viejo en pantalla), lo vuelve
   // a pintar con los datos frescos.
@@ -1019,18 +1025,22 @@ function renderStockCalculado() {
   });
 }
 
-function renderLogMermas(mermasHoy) {
+function renderLogMermas(lista, opciones) {
+  const { mostrarFecha = false, mensajeVacio = 'Sin mermas registradas hoy.' } = opciones || {};
   const cont = document.getElementById('log-mermas');
-  if (!mermasHoy.length) {
-    cont.innerHTML = '<div>Sin mermas registradas hoy.</div>';
+  if (!lista.length) {
+    cont.innerHTML = `<div>${escapeAttr(mensajeVacio)}</div>`;
     return;
   }
-  cont.innerHTML = mermasHoy.map((m) => {
-    const hora = (m.fecha || '').slice(11, 16);
+  const ordenada = [...lista].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  cont.innerHTML = ordenada.map((m) => {
+    const fechaHora = mostrarFecha ? `${(m.fecha || '').slice(0, 10)} ${(m.fecha || '').slice(11, 16)}` : (m.fecha || '').slice(11, 16);
     const nombre = m.nombreVisible || m.insumo || m.producto || '';
-    return `<div>${hora} · ${escapeAttr(nombre)} · ${m.cantidad}${m.motivo ? ' · ' + escapeAttr(m.motivo) : ''}</div>`;
+    return `<div>${fechaHora} · ${escapeAttr(nombre)} · ${m.cantidad}${m.motivo ? ' · ' + escapeAttr(m.motivo) : ''}</div>`;
   }).join('');
 }
+
+let mermasHoyActual = []; // para poder volver a "Ver hoy" después de buscar por calendario
 
 // ===================== CALENDARIO DE MERMAS =====================
 const MESES_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -1097,7 +1107,7 @@ function renderCalendarioMermas() {
     el.addEventListener('click', () => clickDiaCalendario(el.dataset.fecha));
   });
 
-  renderResumenCalendario();
+  mostrarSeleccionCalendario();
 }
 
 function clickDiaCalendario(iso) {
@@ -1112,6 +1122,7 @@ function clickDiaCalendario(iso) {
     calSeleccionFin = iso;
   }
   renderCalendarioMermas();
+  mostrarSeleccionCalendario();
 }
 
 document.getElementById('btn-mes-anterior').addEventListener('click', () => {
@@ -1123,50 +1134,65 @@ document.getElementById('btn-mes-siguiente').addEventListener('click', () => {
   renderCalendarioMermas();
 });
 
-function renderResumenCalendario() {
-  const cont = document.getElementById('calendario-resumen');
+// Muestra qué día(s) están elegidos y habilita "Buscar" -- no calcula nada
+// todavía, eso pasa solo al tocar el botón.
+function mostrarSeleccionCalendario() {
+  const texto = document.getElementById('calendario-seleccion');
+  const btnBuscar = document.getElementById('btn-buscar-calendario');
+  document.getElementById('calendario-error').style.display = 'none';
+
   if (!calSeleccionInicio) {
-    cont.innerHTML = '<p class="hint">Toca un día marcado para ver el resumen.</p>';
+    texto.textContent = 'Toca un día marcado para elegirlo.';
+    btnBuscar.disabled = true;
     return;
   }
-  const [ini, fin] = calSeleccionFin ? [calSeleccionInicio, calSeleccionFin].sort() : [calSeleccionInicio, calSeleccionInicio];
-
-  const mermasEnRango = mermasCompletas.filter((m) => {
-    const f = (m.fecha || '').slice(0, 10);
-    return f >= ini && f <= fin;
-  });
-
-  const titulo = ini === fin
-    ? `Mermas del ${formatoFechaLarga(ini)}`
-    : `Mermas del ${formatoFechaLarga(ini)} al ${formatoFechaLarga(fin)}`;
-
-  if (!mermasEnRango.length) {
-    cont.innerHTML = `<h3 style="font-size:13px;margin:0 0 8px;">${titulo}</h3><p class="hint">Sin mermas en ese rango.</p>`;
-    return;
+  if (!calSeleccionFin) {
+    texto.textContent = `Día elegido: ${formatoFechaLarga(calSeleccionInicio)}`;
+  } else {
+    const [ini, fin] = [calSeleccionInicio, calSeleccionFin].sort();
+    texto.textContent = `Rango elegido: ${formatoFechaLarga(ini)} al ${formatoFechaLarga(fin)}`;
   }
-
-  const agrupado = new Map();
-  mermasEnRango.forEach((m) => {
-    const info = infoParaExportarMerma(m);
-    const key = info.nombre;
-    const e = agrupado.get(key) || { ...info, cantidad: 0 };
-    e.cantidad += Number(m.cantidad) || 0;
-    agrupado.set(key, e);
-  });
-  const filas = [...agrupado.values()].sort((a, b) => b.cantidad - a.cantidad);
-  const total = filas.reduce((acc, f) => acc + f.cantidad, 0);
-
-  cont.innerHTML = `
-    <h3 style="font-size:13px;margin:0 0 8px;">${titulo}</h3>
-    <table class="calendario-resumen-tabla">
-      <thead><tr><th>Producto</th><th>Categoría</th><th style="text-align:right;">Cantidad</th></tr></thead>
-      <tbody>
-        ${filas.map((f) => `<tr><td class="nombre">${escapeAttr(f.nombre)}</td><td class="nombre">${escapeAttr(f.categoria || '')}</td><td style="text-align:right;">${f.cantidad}</td></tr>`).join('')}
-      </tbody>
-      <tfoot><tr><td colspan="2">Total</td><td style="text-align:right;">${total}</td></tr></tfoot>
-    </table>
-  `;
+  btnBuscar.disabled = false;
 }
+
+document.getElementById('btn-buscar-calendario').addEventListener('click', () => {
+  const errorEl = document.getElementById('calendario-error');
+  errorEl.style.display = 'none';
+  try {
+    if (!calSeleccionInicio) throw new Error('Elige un día en el calendario primero.');
+    const [ini, fin] = calSeleccionFin ? [calSeleccionInicio, calSeleccionFin].sort() : [calSeleccionInicio, calSeleccionInicio];
+
+    const mermasEnRango = mermasCompletas.filter((m) => {
+      const f = (m.fecha || '').slice(0, 10);
+      return f >= ini && f <= fin;
+    });
+
+    const tituloRango = ini === fin
+      ? `Historial de mermas — ${formatoFechaLarga(ini)}`
+      : `Historial de mermas — ${formatoFechaLarga(ini)} al ${formatoFechaLarga(fin)}`;
+
+    document.getElementById('historial-titulo').textContent = tituloRango;
+    document.getElementById('btn-historial-hoy').style.display = 'inline-block';
+    renderLogMermas(mermasEnRango, { mostrarFecha: ini !== fin, mensajeVacio: 'Sin mermas registradas en ese rango.' });
+
+    // cierra el calendario y lleva la vista al historial, que es donde
+    // ahora aparece el resultado
+    document.getElementById('calendario-panel').style.display = 'none';
+    document.getElementById('log-mermas').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    errorEl.textContent = 'Error al buscar: ' + e.message;
+    errorEl.style.display = 'block';
+  }
+});
+
+document.getElementById('btn-historial-hoy').addEventListener('click', () => {
+  document.getElementById('historial-titulo').textContent = 'Historial de mermas de hoy';
+  document.getElementById('btn-historial-hoy').style.display = 'none';
+  renderLogMermas(mermasHoyActual);
+  calSeleccionInicio = null;
+  calSeleccionFin = null;
+  mostrarSeleccionCalendario();
+});
 
 function formatoFechaLarga(iso) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -1356,7 +1382,10 @@ document.getElementById('btn-guardar-merma').addEventListener('click', async () 
     statusEl.className = 'status ok';
     const jsonActualizado = await obtenerDatosStockCafeteria();
     mermasCompletas = jsonActualizado.mermas || mermasCompletas;
-    renderLogMermas(jsonActualizado.mermasHoy || []);
+    mermasHoyActual = jsonActualizado.mermasHoy || [];
+    renderLogMermas(mermasHoyActual);
+    document.getElementById('historial-titulo').textContent = 'Historial de mermas de hoy';
+    document.getElementById('btn-historial-hoy').style.display = 'none';
     if (document.getElementById('calendario-panel').style.display !== 'none') {
       renderCalendarioMermas();
     }
