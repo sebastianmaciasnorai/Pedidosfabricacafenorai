@@ -160,12 +160,16 @@
   .merma-form input[type="text"]{flex:1;min-width:140px;}
   .merma-form input{border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-family:"JetBrains Mono",monospace;font-size:12.5px;background:#fff;}
   .merma-form input[type="number"]{width:100px;}
+  .calendario-overlay{
+    display:none;position:fixed;inset:0;background:rgba(20,24,28,0.45);
+    align-items:center;justify-content:center;z-index:1000;padding:16px;
+  }
+  .calendario-overlay.visible{display:flex;}
   .calendario-flotante{
-    position:absolute;top:calc(100% + 6px);right:0;z-index:50;
-    width:360px;max-width:calc(100vw - 32px);
-    max-height:calc(100vh - 220px);overflow-y:auto;
-    background:var(--panel);border:1px solid var(--line);border-radius:14px;
-    padding:16px;box-shadow:0 12px 28px rgba(0,0,0,0.18);
+    width:360px;max-width:100%;
+    max-height:calc(100vh - 48px);overflow-y:auto;
+    background:var(--panel);border-radius:14px;
+    padding:16px;box-shadow:0 12px 32px rgba(0,0,0,0.25);
   }
   .calendario-caja{max-width:340px;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--panel);}
   .calendario-header{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px;font-weight:700;font-size:14px;}
@@ -210,7 +214,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v3.9</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.0</span></h1>
   <div class="tabs">
     <button class="tab-btn" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -343,11 +347,12 @@
     </div>
   </div>
 
-  <section id="seccion-calendario-mermas" style="display:none;margin-top:16px;position:relative;">
+  <section id="seccion-calendario-mermas" style="display:none;margin-top:16px;">
     <div style="display:flex;justify-content:flex-end;">
       <button type="button" class="add" id="btn-toggle-calendario">📅 Calendario de mermas</button>
     </div>
-    <div id="calendario-panel" class="calendario-flotante" style="display:none;">
+    <div id="calendario-panel" class="calendario-overlay">
+      <div class="calendario-flotante">
       <p class="hint">Los días con mermas aparecen marcados. Toca un día para elegirlo; toca un segundo día para elegir un rango entre ambos.</p>
       <div class="calendario-caja">
         <div class="calendario-header">
@@ -363,6 +368,7 @@
       <div id="calendario-seleccion" style="margin-top:12px;font-size:13px;color:var(--ink-soft);">Toca un día marcado para elegirlo.</div>
       <button type="button" class="save" id="btn-buscar-calendario" style="width:100%;margin-top:8px;" disabled>Buscar</button>
       <div id="calendario-error" class="status err" style="display:none;margin-top:8px;"></div>
+      </div>
     </div>
   </section>
 
@@ -831,7 +837,7 @@ function aplicarDatosMermas(datos) {
 
   // Si el calendario ya estaba abierto (dato viejo en pantalla), lo vuelve
   // a pintar con los datos frescos.
-  if (document.getElementById('calendario-panel').style.display !== 'none') {
+  if (document.getElementById('calendario-panel').classList.contains('visible')) {
     renderCalendarioMermas();
   }
 }
@@ -1056,19 +1062,21 @@ function diasConMermas() {
   return new Set(mermasCompletas.map((m) => (m.fecha || '').slice(0, 10)));
 }
 
-document.getElementById('btn-toggle-calendario').addEventListener('click', (e) => {
-  e.stopPropagation();
+document.getElementById('btn-toggle-calendario').addEventListener('click', () => {
   const panel = document.getElementById('calendario-panel');
-  const abrir = panel.style.display === 'none';
-  panel.style.display = abrir ? 'block' : 'none';
+  const abrir = !panel.classList.contains('visible');
+  panel.classList.toggle('visible', abrir);
   if (abrir) renderCalendarioMermas();
 });
 
-// Cierra el calendario si se toca fuera de él (y fuera del botón que lo abre).
-document.addEventListener('click', (e) => {
-  const panel = document.getElementById('calendario-panel');
-  if (panel.style.display !== 'none' && !e.target.closest('#calendario-panel') && !e.target.closest('#btn-toggle-calendario')) {
-    panel.style.display = 'none';
+// Cierra el calendario SOLO si el click fue directo sobre el fondo
+// oscurecido (fuera de la tarjeta) -- comparar contra e.currentTarget en
+// vez de usar closest() evita que el calendario se cierre solo cuando se
+// redibuja al elegir un día (el nodo tocado se reemplaza y closest() deja
+// de encontrar al padre, aunque el click sí fue "adentro").
+document.getElementById('calendario-panel').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) {
+    e.currentTarget.classList.remove('visible');
   }
 });
 
@@ -1177,7 +1185,7 @@ document.getElementById('btn-buscar-calendario').addEventListener('click', () =>
 
     // cierra el calendario y lleva la vista al historial, que es donde
     // ahora aparece el resultado
-    document.getElementById('calendario-panel').style.display = 'none';
+    document.getElementById('calendario-panel').classList.remove('visible');
     document.getElementById('log-mermas').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
     errorEl.textContent = 'Error al buscar: ' + e.message;
@@ -1386,7 +1394,7 @@ document.getElementById('btn-guardar-merma').addEventListener('click', async () 
     renderLogMermas(mermasHoyActual);
     document.getElementById('historial-titulo').textContent = 'Historial de mermas de hoy';
     document.getElementById('btn-historial-hoy').style.display = 'none';
-    if (document.getElementById('calendario-panel').style.display !== 'none') {
+    if (document.getElementById('calendario-panel').classList.contains('visible')) {
       renderCalendarioMermas();
     }
     fetch('/.netlify/functions/cache-datos', {
