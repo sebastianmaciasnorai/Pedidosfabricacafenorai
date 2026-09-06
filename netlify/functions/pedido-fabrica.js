@@ -75,10 +75,11 @@ exports.handler = async (event) => {
   const iniDeseada = sumarDiasYYYYMMDD(end, -(dias - 1));
 
   try {
+    // Sin siteID/token a mano: Netlify los inyecta solo cuando la función
+    // corre en su propia infraestructura -- evita que un token guardado
+    // manualmente (BLOBS_TOKEN) se venza algún día y tumbe todo con un 401.
     const store = getStore({
       name: STORE_NAME,
-      siteID: process.env.BLOBS_SITE_ID,
-      token: process.env.BLOBS_TOKEN,
     });
     const [recetas, stock, mermas, recepciones] = await Promise.all([
       store.get('recetas', { type: 'json' }),

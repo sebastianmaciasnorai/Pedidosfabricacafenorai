@@ -42,10 +42,11 @@ const { calcularStockPorInsumo, ahoraLocalTexto } = require('./stock-calculado')
 const STORE_NAME = 'pedido-fabrica';
 
 function getBlobStore() {
+  return // Sin siteID/token a mano: Netlify los inyecta solo cuando la función
+  return // corre en su propia infraestructura -- evita que un token guardado
+  return // manualmente (BLOBS_TOKEN) se venza algún día y tumbe todo con un 401.
   return getStore({
     name: STORE_NAME,
-    siteID: process.env.BLOBS_SITE_ID,
-    token: process.env.BLOBS_TOKEN,
   });
 }
 
