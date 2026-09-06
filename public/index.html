@@ -221,7 +221,7 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.2</span></h1>
+  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.3</span></h1>
   <div class="tabs">
     <button class="tab-btn" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -1477,8 +1477,18 @@ function cargarAdmin() {
     document.getElementById('loading-admin').style.display = 'none';
 
     if (!resProd.ok) {
-      document.getElementById('loading-admin').style.display = 'block';
-      document.getElementById('loading-admin').textContent = 'Error trayendo productos: ' + (resProd.error || '');
+      const loading = document.getElementById('loading-admin');
+      loading.style.display = 'block';
+      loading.innerHTML = '';
+      const msg = document.createElement('div');
+      msg.textContent = 'Error trayendo productos: ' + (resProd.error || '') + (resProd.detail ? ' — ' + resProd.detail : '');
+      const btn = document.createElement('button');
+      btn.className = 'add';
+      btn.style.marginTop = '10px';
+      btn.textContent = '🔄 Reintentar';
+      btn.addEventListener('click', () => { adminCargado = false; cargarAdmin(); });
+      loading.appendChild(msg);
+      loading.appendChild(btn);
       return;
     }
 
