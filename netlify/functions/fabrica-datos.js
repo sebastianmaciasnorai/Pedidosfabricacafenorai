@@ -32,12 +32,15 @@
 // tener usuarios, agrégale el mismo chequeo de token que usa el resto del
 // dashboard antes de exponerla en producción.
 
-const { getStore } = require('@netlify/blobs');
+const { getStore, connectLambda } = require('@netlify/blobs');
 
 const CLAVES_VALIDAS = ['recetas', 'stock'];
 const STORE_NAME = 'pedido-fabrica';
 
 exports.handler = async (event) => {
+  // Necesario en el modo "Lambda" (exports.handler clásico): sin esto,
+  // Netlify NO rellena solo la conexión a Blobs y getStore() falla.
+  connectLambda(event);
   const store = getStore({
     name: STORE_NAME,
   });

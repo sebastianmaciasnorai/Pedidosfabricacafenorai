@@ -35,22 +35,25 @@
 // al ultimoConteoFecha más antiguo entre todos los insumos (ya no aportan
 // nada al cálculo de todas formas).
 
-const { getStore } = require('@netlify/blobs');
+const { getStore, connectLambda } = require('@netlify/blobs');
 const { obtenerVentasConCache } = require('./ventas-cache');
 const { calcularStockPorInsumo, ahoraLocalTexto } = require('./stock-calculado');
 
 const STORE_NAME = 'pedido-fabrica';
 
 function getBlobStore() {
-  return // Sin siteID/token a mano: Netlify los inyecta solo cuando la función
-  return // corre en su propia infraestructura -- evita que un token guardado
-  return // manualmente (BLOBS_TOKEN) se venza algún día y tumbe todo con un 401.
+  // Sin siteID/token a mano: Netlify los inyecta solo cuando la función
+  // corre en su propia infraestructura -- evita que un token guardado
+  // manualmente (BLOBS_TOKEN) se venza algún día y tumbe todo con un 401.
   return getStore({
     name: STORE_NAME,
   });
 }
 
 exports.handler = async (event) => {
+  // Necesario en el modo "Lambda" (exports.handler clásico): sin esto,
+  // Netlify NO rellena solo la conexión a Blobs y getStore() falla.
+  connectLambda(event);
   const { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU } = process.env;
   if (!TOTEAT_API_TOKEN || !TOTEAT_XIR || !TOTEAT_XIL || !TOTEAT_XIU) {
     return jsonResponse(500, { ok: false, error: 'Faltan variables de entorno de Toteat en el servidor.' });

@@ -16,8 +16,12 @@
 // GET /.netlify/functions/productos-toteat?dias=7
 
 const { obtenerVentasConCache } = require('./ventas-cache');
+const { connectLambda } = require('@netlify/blobs');
 
 exports.handler = async (event) => {
+  // Necesario en el modo "Lambda" (exports.handler clásico): sin esto,
+  // Netlify NO rellena solo la conexión a Blobs y getStore() falla.
+  connectLambda(event);
   const qs = event.queryStringParameters || {};
   const { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU } = process.env;
   if (!TOTEAT_API_TOKEN || !TOTEAT_XIR || !TOTEAT_XIL || !TOTEAT_XIU) {

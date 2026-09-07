@@ -36,12 +36,15 @@
 
 const { leerHistorialGuardado, obtenerVentasConCache } = require('./ventas-cache');
 const { calcularStockPorInsumo } = require('./stock-calculado');
-const { getStore } = require('@netlify/blobs');
+const { getStore, connectLambda } = require('@netlify/blobs');
 
 const STORE_NAME = 'pedido-fabrica';
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 exports.handler = async (event) => {
+  // Necesario en el modo "Lambda" (exports.handler clásico): sin esto,
+  // Netlify NO rellena solo la conexión a Blobs y getStore() falla.
+  connectLambda(event);
   const qs = (event && event.queryStringParameters) || {};
   const { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU } = process.env;
   if (!TOTEAT_API_TOKEN || !TOTEAT_XIR || !TOTEAT_XIL || !TOTEAT_XIU) {

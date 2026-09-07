@@ -56,7 +56,7 @@
 // venta), ese es el único número a ajustar, en la línea que calcula
 // `sugeridoPedir` más abajo.
 
-const { getStore } = require('@netlify/blobs');
+const { getStore, connectLambda } = require('@netlify/blobs');
 const { calcularTendenciaCierrePorProducto } = require('./ventas-fabrica');
 const { obtenerVentasConCache } = require('./ventas-cache');
 const { calcularStockPorInsumo, explotarARecetas, mapaProductosPorNombre } = require('./stock-calculado');
@@ -64,6 +64,9 @@ const { calcularStockPorInsumo, explotarARecetas, mapaProductosPorNombre } = req
 const STORE_NAME = 'pedido-fabrica';
 
 exports.handler = async (event) => {
+  // Necesario en el modo "Lambda" (exports.handler clásico): sin esto,
+  // Netlify NO rellena solo la conexión a Blobs y getStore() falla.
+  connectLambda(event);
   const qs = event.queryStringParameters || {};
   const { TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU } = process.env;
   if (!TOTEAT_API_TOKEN || !TOTEAT_XIR || !TOTEAT_XIL || !TOTEAT_XIU) {
