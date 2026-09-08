@@ -170,7 +170,43 @@ exports.handler = async (event) => {
       return jsonResponse(200, { ok: true });
     }
 
-    return jsonResponse(400, { ok: false, error: 'accion debe ser una de: merma, recepcion, conteo.' });
+    // Modo admin (pestaña Mermas, botón "🔒 Admin") -- corregir un registro
+    // mal hecho (ej: se registró la misma merma dos veces por error). Se
+    // identifica la fila por el objeto COMPLETO tal cual llegó al cliente
+    // (no se usan ids -- así funciona también con mermas viejas que nunca
+    // tuvieron uno). Si hay dos filas idénticas (como en un doble clic),
+    // se modifica/elimina solo UNA, no todas.
+    if (body.accion === 'editar-merma') {
+      if (!body.original || !(Number(body.nuevaCantidad) > 0)) {
+        return jsonResponse(400, { ok: false, error: 'Se espera { original, nuevaCantidad > 0 }.' });
+      }
+      const original = sinNombreVisible(body.original);
+      const mermas = (await store.get('mermas', { type: 'json' })) || [];
+      const idx = mermas.findIndex((m) => JSON.stringify(m) === JSON.stringify(original));
+      if (idx === -1) {
+        return jsonResponse(404, { ok: false, error: 'No se encontró esa merma (puede que ya se haya editado o borrado).' });
+      }
+      mermas[idx] = { ...mermas[idx], cantidad: Number(body.nuevaCantidad) };
+      await store.setJSON('mermas', mermas);
+      return jsonResponse(200, { ok: true });
+    }
+
+    if (body.accion === 'eliminar-merma') {
+      if (!body.original) {
+        return jsonResponse(400, { ok: false, error: 'Se espera { original }.' });
+      }
+      const original = sinNombreVisible(body.original);
+      const mermas = (await store.get('mermas', { type: 'json' })) || [];
+      const idx = mermas.findIndex((m) => JSON.stringify(m) === JSON.stringify(original));
+      if (idx === -1) {
+        return jsonResponse(404, { ok: false, error: 'No se encontró esa merma (puede que ya se haya editado o borrado).' });
+      }
+      mermas.splice(idx, 1);
+      await store.setJSON('mermas', mermas);
+      return jsonResponse(200, { ok: true });
+    }
+
+    return jsonResponse(400, { ok: false, error: 'accion debe ser una de: merma, recepcion, conteo, editar-merma, eliminar-merma.' });
   }
 
   return jsonResponse(405, { ok: false, error: 'Método no soportado.' });
@@ -178,6 +214,14 @@ exports.handler = async (event) => {
 
 // Texto para mostrar en el historial: el insumo directo, o el producto
 // (+ sabor si corresponde) cuando la merma fue de un producto vendido.
+// Quita "nombreVisible" (campo que solo se agrega al leer, para mostrar en
+// pantalla -- nunca existe en lo guardado en Blobs) antes de comparar un
+// objeto recibido del cliente contra lo que hay guardado.
+function sinNombreVisible(obj) {
+  const { nombreVisible, ...resto } = obj;
+  return resto;
+}
+
 function nombreVisibleMerma(m) {
   if (m.tipo === 'producto-sabor') return `${m.producto} (${m.patronToken})`;
   if (m.tipo === 'producto') return m.producto;
