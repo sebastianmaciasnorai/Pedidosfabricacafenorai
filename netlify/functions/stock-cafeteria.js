@@ -88,16 +88,27 @@ exports.handler = async (event) => {
         TOTEAT_API_TOKEN, TOTEAT_XIR, TOTEAT_XIL, TOTEAT_XIU,
       });
 
-      const items = calcularStockPorInsumo({ recetas: recetas || [], stock, mermas: mermas || [], recepciones: recepciones || [], porDia })
+      const items = calcularStockPorInsumo({ recetas: recetas || [], stock, mermas: (mermas || []).filter((m) => !m.eliminada), recepciones: recepciones || [], porDia })
         .sort((a, b) => Number(b.bajoMinimo) - Number(a.bajoMinimo) || a.insumo.localeCompare(b.insumo, 'es'));
 
       const hoyLocal = ahoraLocalTexto().slice(0, 10);
-      const mermasHoy = (mermas || [])
+      const activas = (mermas || []).filter((m) => !m.eliminada);
+      const eliminadas = (mermas || []).filter((m) => m.eliminada);
+
+      const mermasHoy = activas
         .filter((m) => (m.fecha || '').slice(0, 10) === hoyLocal)
         .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
         .map((m) => ({ ...m, nombreVisible: nombreVisibleMerma(m) }));
 
-      return jsonResponse(200, { ok: true, items, mermasHoy, mermas: (mermas || []).map((m) => ({ ...m, nombreVisible: nombreVisibleMerma(m) })) });
+      return jsonResponse(200, {
+        ok: true,
+        items,
+        mermasHoy,
+        mermas: activas.map((m) => ({ ...m, nombreVisible: nombreVisibleMerma(m) })),
+        mermasEliminadas: eliminadas
+          .sort((a, b) => (a.eliminadaFecha < b.eliminadaFecha ? 1 : -1))
+          .map((m) => ({ ...m, nombreVisible: nombreVisibleMerma(m) })),
+      });
     } catch (e) {
       return jsonResponse(502, { ok: false, error: 'No se pudo calcular el stock.', detail: String(e) });
     }
@@ -201,12 +212,30 @@ exports.handler = async (event) => {
       if (idx === -1) {
         return jsonResponse(404, { ok: false, error: 'No se encontró esa merma (puede que ya se haya editado o borrado).' });
       }
-      mermas.splice(idx, 1);
+      // Borrado SUAVE: se marca en vez de borrarse de verdad, para poder
+      // recuperarla desde la papelera (modo admin) si fue un error.
+      mermas[idx] = { ...mermas[idx], eliminada: true, eliminadaFecha: ahoraLocalTexto() };
       await store.setJSON('mermas', mermas);
       return jsonResponse(200, { ok: true });
     }
 
-    return jsonResponse(400, { ok: false, error: 'accion debe ser una de: merma, recepcion, conteo, editar-merma, eliminar-merma.' });
+    if (body.accion === 'restaurar-merma') {
+      if (!body.original) {
+        return jsonResponse(400, { ok: false, error: 'Se espera { original }.' });
+      }
+      const original = sinNombreVisible(body.original);
+      const mermas = (await store.get('mermas', { type: 'json' })) || [];
+      const idx = mermas.findIndex((m) => JSON.stringify(m) === JSON.stringify(original));
+      if (idx === -1) {
+        return jsonResponse(404, { ok: false, error: 'No se encontró esa merma en la papelera.' });
+      }
+      const { eliminada, eliminadaFecha, ...restaurada } = mermas[idx];
+      mermas[idx] = restaurada;
+      await store.setJSON('mermas', mermas);
+      return jsonResponse(200, { ok: true });
+    }
+
+    return jsonResponse(400, { ok: false, error: 'accion debe ser una de: merma, recepcion, conteo, editar-merma, eliminar-merma, restaurar-merma.' });
   }
 
   return jsonResponse(405, { ok: false, error: 'Método no soportado.' });
