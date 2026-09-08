@@ -222,7 +222,7 @@
 
 <header>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <h1 style="margin:0;">Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.9</span></h1>
+    <h1 style="margin:0;">Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v5.0</span></h1>
     <button type="button" class="chico" id="btn-modo-admin">🔒 Admin</button>
   </div>
   <div class="tabs">
@@ -963,8 +963,40 @@ document.getElementById('btn-actualizar-codigos').addEventListener('click', asyn
 });
 
 function armarItemsParaMerma(resProductos, resCatalogo) {
+  // Se junta por NOMBRE (no por código) en dos mapas -- primero lo que
+  // viene de ventas recientes, y AL FINAL se pasa por encima con lo que
+  // diga el catálogo completo. El catálogo se pide siempre en vivo (sin
+  // caché), así que si alguien cambió el código de un producto en Toteat,
+  // es la fuente correcta -- el historial de ventas de días anteriores
+  // puede traer pegado un código viejo (quedó guardado en caché ese día).
+  const productosPorNombre = new Map(); // nombre -> { codigo, categoria }
+  const saboresPorClave = new Map(); // "base|||token" -> { base, token, codigoBase, patronCodigo, categoria }
+
+  const registrarProducto = (nombre, codigo, categoria) => {
+    productosPorNombre.set(nombre, { codigo: codigo || '', categoria });
+  };
+  const registrarSabor = (base, token, codigoBase, patronCodigo, categoria) => {
+    saboresPorClave.set(base + '|||' + token, { base, token, codigoBase: codigoBase || null, patronCodigo: patronCodigo || null, categoria });
+  };
+
+  (resProductos.ok ? resProductos.categorias : []).forEach((cat) => {
+    (cat.productos || []).forEach((p) => registrarProducto(p.producto, p.codigo, cat.categoria));
+    (cat.familias || []).forEach((fam) => {
+      fam.tokens.forEach((tok) => registrarSabor(fam.base, tok.token, fam.codigoBase, tok.codigo, cat.categoria));
+    });
+  });
+
+  // Catálogo al final -- pisa lo anterior a propósito.
+  (resCatalogo.ok ? resCatalogo.categorias : []).forEach((cat) => {
+    (cat.productos || []).forEach((p) => {
+      registrarProducto(p.producto, p.codigo, cat.categoria);
+      (p.gruposVariantes || []).forEach((grupo) => {
+        grupo.opciones.forEach((op) => registrarSabor(p.producto, op.nombre, p.codigo, op.codigo, cat.categoria));
+      });
+    });
+  });
+
   const items = [];
-  const vistos = new Set(); // evita duplicados por código
   categoriaPorClaveMerma = new Map();
 
   stockData.forEach((s) => {
@@ -972,45 +1004,24 @@ function armarItemsParaMerma(resProductos, resCatalogo) {
     categoriaPorClaveMerma.set('insumo:' + s.insumo, 'Insumo de fábrica');
   });
 
-  const agregarProducto = (nombre, codigo, categoria) => {
-    const key = 'p:' + codigo;
-    if (codigo && vistos.has(key)) return;
-    if (codigo) vistos.add(key);
-    items.push({ tipo: 'producto', nombre, codigo: codigo || '', producto: nombre, codigoProducto: codigo || null });
-    if (codigo) categoriaPorClaveMerma.set('producto:' + codigo, categoria);
-    categoriaPorClaveMerma.set('producto:' + nombre, categoria);
-  };
-  const agregarSabor = (base, token, codigoBase, patronCodigo, categoria) => {
-    const key = 'ps:' + codigoBase + '|' + patronCodigo;
-    if (codigoBase && patronCodigo && vistos.has(key)) return;
-    if (codigoBase && patronCodigo) vistos.add(key);
-    items.push({
-      tipo: 'producto-sabor',
-      nombre: `${base} (${token})`,
-      codigo: patronCodigo || '',
-      producto: base,
-      patronToken: token,
-      codigoBase: codigoBase || null,
-      patronCodigo: patronCodigo || null,
-    });
-    if (patronCodigo) categoriaPorClaveMerma.set('sabor:' + patronCodigo, categoria);
-    categoriaPorClaveMerma.set('sabor:' + base + '|||' + token, categoria);
-  };
-
-  (resProductos.ok ? resProductos.categorias : []).forEach((cat) => {
-    (cat.productos || []).forEach((p) => agregarProducto(p.producto, p.codigo, cat.categoria));
-    (cat.familias || []).forEach((fam) => {
-      fam.tokens.forEach((tok) => agregarSabor(fam.base, tok.token, fam.codigoBase, tok.codigo, cat.categoria));
-    });
+  productosPorNombre.forEach((info, nombre) => {
+    items.push({ tipo: 'producto', nombre, codigo: info.codigo, producto: nombre, codigoProducto: info.codigo || null });
+    if (info.codigo) categoriaPorClaveMerma.set('producto:' + info.codigo, info.categoria);
+    categoriaPorClaveMerma.set('producto:' + nombre, info.categoria);
   });
 
-  (resCatalogo.ok ? resCatalogo.categorias : []).forEach((cat) => {
-    (cat.productos || []).forEach((p) => {
-      agregarProducto(p.producto, p.codigo, cat.categoria);
-      (p.gruposVariantes || []).forEach((grupo) => {
-        grupo.opciones.forEach((op) => agregarSabor(p.producto, op.nombre, p.codigo, op.codigo, cat.categoria));
-      });
+  saboresPorClave.forEach((info) => {
+    items.push({
+      tipo: 'producto-sabor',
+      nombre: `${info.base} (${info.token})`,
+      codigo: info.patronCodigo || '',
+      producto: info.base,
+      patronToken: info.token,
+      codigoBase: info.codigoBase,
+      patronCodigo: info.patronCodigo,
     });
+    if (info.patronCodigo) categoriaPorClaveMerma.set('sabor:' + info.patronCodigo, info.categoria);
+    categoriaPorClaveMerma.set('sabor:' + info.base + '|||' + info.token, info.categoria);
   });
 
   return items;
