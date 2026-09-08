@@ -222,7 +222,7 @@
 
 <header>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <h1 style="margin:0;">Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.6</span></h1>
+    <h1 style="margin:0;">Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.7</span></h1>
     <button type="button" class="chico" id="btn-modo-admin">🔒 Admin</button>
   </div>
   <div class="tabs">
@@ -322,6 +322,10 @@
     <div class="merma-buscador-wrap-grande" id="paso-buscar-merma">
       <input type="text" id="merma-buscador" placeholder="Buscar o escanear código de barras..." autocomplete="off" autofocus>
       <div id="merma-resultados" class="merma-resultados-dropdown"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      <button type="button" class="chico" id="btn-actualizar-codigos">🔄 Actualizar productos y códigos</button>
+      <span id="status-actualizar-codigos" class="status"></span>
     </div>
   </section>
 
@@ -910,6 +914,53 @@ async function cargarMermas() {
 // categoriaPorClaveMerma, para poder mostrar la categoría en el Excel
 // exportado sin tener que volver a consultar nada.
 let categoriaPorClaveMerma = new Map();
+
+// Botón "🔄 Actualizar productos y códigos": fuerza traer de nuevo (en vivo,
+// sin cache) los productos vendidos + el catálogo completo de Toteat -- por
+// si cambiaste un código allá y el refresco automático en segundo plano
+// falló en silencio (no avisa si falla, para no tapar la pantalla con
+// errores mientras se ve el cache de siempre). Este botón sí avisa.
+document.getElementById('btn-actualizar-codigos').addEventListener('click', async () => {
+  const statusEl = document.getElementById('status-actualizar-codigos');
+  statusEl.textContent = 'Actualizando desde Toteat...';
+  statusEl.className = 'status';
+  try {
+    const [resProductos, resCatalogo] = await Promise.all([
+      fetch('/.netlify/functions/productos-toteat').then((r) => r.json()),
+      fetch('/.netlify/functions/productos-catalogo').then((r) => r.json()),
+    ]);
+    if (!resProductos.ok) throw new Error('productos vendidos: ' + (resProductos.error || 'error desconocido'));
+    if (!resCatalogo.ok) throw new Error('catálogo completo: ' + (resCatalogo.error || 'error desconocido'));
+
+    itemsParaMerma = armarItemsParaMerma(resProductos, resCatalogo);
+    const nProductos = itemsParaMerma.filter((it) => it.tipo === 'producto').length;
+    const nSabores = itemsParaMerma.filter((it) => it.tipo === 'producto-sabor').length;
+
+    statusEl.textContent = `✅ Actualizado: ${nProductos} producto(s), ${nSabores} sabor(es)/variante(s).`;
+    statusEl.className = 'status ok';
+
+    // Guarda el cache en la nube con la lista de productos ya al día, sin
+    // tocar lo demás (stock, historial de mermas, papelera).
+    fetch('/.netlify/functions/cache-datos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tab: 'mermas',
+        datos: {
+          stockData,
+          itemsParaMerma,
+          mermasCompletas,
+          categoriaPorClaveMerma: [...categoriaPorClaveMerma.entries()],
+          mermasHoy: mermasHoyActual,
+          mermasEliminadas: mermasEliminadasActual,
+        },
+      }),
+    }).catch(() => {});
+  } catch (e) {
+    statusEl.textContent = '❌ No se pudo actualizar: ' + e.message;
+    statusEl.className = 'status err';
+  }
+});
 
 function armarItemsParaMerma(resProductos, resCatalogo) {
   const items = [];
