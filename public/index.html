@@ -222,7 +222,7 @@
 
 <header>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <h1 style="margin:0;">Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.7</span></h1>
+    <h1 style="margin:0;">Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.9</span></h1>
     <button type="button" class="chico" id="btn-modo-admin">🔒 Admin</button>
   </div>
   <div class="tabs">
@@ -1195,6 +1195,86 @@ function renderPapelera() {
   });
 }
 
+// Compara dos mermas ignorando "nombreVisible" (se agrega solo al leer, no
+// existe en lo guardado) -- para encontrar la misma fila en los distintos
+// arreglos que se mantienen en memoria (hoy, completas, papelera, lo que
+// está pintado en pantalla ahora mismo).
+function limpiarMermaParaComparar(o) {
+  const { nombreVisible, ...resto } = o;
+  return JSON.stringify(resto);
+}
+
+// Aplica el cambio DE INMEDIATO en memoria (sin esperar al servidor) en
+// los 4 lugares donde puede aparecer la misma fila, y repinta. Evita el
+// "doble borrado/doble ingreso" que pasaba al esperar el recálculo
+// completo contra Toteat antes de reflejar el cambio.
+function actualizarMermasEnMemoria(accion, original, extra) {
+  const clave = limpiarMermaParaComparar(original);
+  [mermasHoyActual, mermasCompletas, mermasEliminadasActual, ultimaListaHistorialRenderizada].forEach((arr) => {
+    const idx = arr.findIndex((m) => limpiarMermaParaComparar(m) === clave);
+    if (idx === -1) return;
+    if (accion === 'editar') {
+      arr[idx] = { ...arr[idx], cantidad: extra.nuevaCantidad };
+    } else {
+      arr.splice(idx, 1);
+    }
+  });
+
+  if (accion === 'eliminar') {
+    mermasEliminadasActual = [{ ...original, eliminada: true, eliminadaFecha: ahoraLocalTextoCliente() }, ...mermasEliminadasActual];
+  }
+  if (accion === 'restaurar') {
+    const { eliminada, eliminadaFecha, ...restaurada } = original;
+    mermasCompletas = [restaurada, ...mermasCompletas];
+    if ((restaurada.fecha || '').slice(0, 10) === ahoraLocalTextoCliente().slice(0, 10)) {
+      mermasHoyActual = [restaurada, ...mermasHoyActual];
+    }
+  }
+
+  renderLogMermas(ultimaListaHistorialRenderizada);
+  renderPapelera();
+}
+
+// Recién ahora, de fondo (sin bloquear al operario), se recalcula todo de
+// verdad contra Toteat y se reemplaza por el dato definitivo -- y se
+// guarda el cache en la nube para que se vea igual en cualquier equipo.
+function sincronizarMermasDeFondo() {
+  (async () => {
+    try {
+      const jsonActualizado = await obtenerDatosStockCafeteria();
+      mermasCompletas = jsonActualizado.mermas || [];
+      mermasHoyActual = jsonActualizado.mermasHoy || [];
+      mermasEliminadasActual = jsonActualizado.mermasEliminadas || [];
+      if (document.getElementById('historial-titulo').textContent === 'Historial de mermas de hoy') {
+        renderLogMermas(mermasHoyActual);
+      }
+      renderPapelera();
+      if (document.getElementById('calendario-panel').classList.contains('visible')) {
+        renderCalendarioMermas();
+      }
+      fetch('/.netlify/functions/cache-datos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tab: 'mermas',
+          datos: {
+            stockData,
+            itemsParaMerma,
+            mermasCompletas,
+            categoriaPorClaveMerma: [...categoriaPorClaveMerma.entries()],
+            mermasHoy: mermasHoyActual,
+            mermasEliminadas: mermasEliminadasActual,
+          },
+        }),
+      }).catch(() => {});
+    } catch (e) {
+      // si falla el recálculo de fondo, el cambio optimista se queda en
+      // pantalla igual -- ya quedó guardado en el servidor, solo no se
+      // pudo refrescar el detalle fino hasta la próxima carga
+    }
+  })();
+}
+
 async function restaurarMermaAdmin(original) {
   try {
     const res = await fetch('/.netlify/functions/stock-cafeteria', {
@@ -1204,7 +1284,8 @@ async function restaurarMermaAdmin(original) {
     });
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'Error desconocido');
-    await refrescarHistorialTrasEdicionAdmin();
+    actualizarMermasEnMemoria('restaurar', original);
+    sincronizarMermasDeFondo();
   } catch (e) {
     alert('No se pudo restaurar: ' + e.message);
   }
@@ -1221,7 +1302,8 @@ async function editarMermaAdmin(original) {
     });
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'Error desconocido');
-    await refrescarHistorialTrasEdicionAdmin();
+    actualizarMermasEnMemoria('editar', original, { nuevaCantidad: Number(nueva) });
+    sincronizarMermasDeFondo();
   } catch (e) {
     alert('No se pudo editar: ' + e.message);
   }
@@ -1237,39 +1319,11 @@ async function eliminarMermaAdmin(original) {
     });
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'Error desconocido');
-    await refrescarHistorialTrasEdicionAdmin();
+    actualizarMermasEnMemoria('eliminar', original);
+    sincronizarMermasDeFondo();
   } catch (e) {
     alert('No se pudo eliminar: ' + e.message);
   }
-}
-
-// Tras editar/eliminar, refresca desde el servidor y guarda el cache en la
-// nube de nuevo -- para que el cambio se vea también en el calendario, el
-// Excel, y en cualquier otro dispositivo.
-async function refrescarHistorialTrasEdicionAdmin() {
-  const jsonActualizado = await obtenerDatosStockCafeteria();
-  mermasCompletas = jsonActualizado.mermas || [];
-  mermasHoyActual = jsonActualizado.mermasHoy || [];
-  mermasEliminadasActual = jsonActualizado.mermasEliminadas || [];
-  renderLogMermas(mermasHoyActual);
-  renderPapelera();
-  document.getElementById('historial-titulo').textContent = 'Historial de mermas de hoy';
-  document.getElementById('btn-historial-hoy').style.display = 'none';
-  fetch('/.netlify/functions/cache-datos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      tab: 'mermas',
-      datos: {
-        stockData,
-        itemsParaMerma,
-        mermasCompletas,
-        categoriaPorClaveMerma: [...categoriaPorClaveMerma.entries()],
-        mermasHoy: mermasHoyActual,
-        mermasEliminadas: mermasEliminadasActual,
-      },
-    }),
-  }).catch(() => {});
 }
 
 let mermasHoyActual = []; // para poder volver a "Ver hoy" después de buscar por calendario
@@ -1280,6 +1334,16 @@ const MESES_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio'
 let calendarioMesActual = new Date(); // mes que se está mostrando
 let calSeleccionInicio = null; // 'YYYY-MM-DD'
 let calSeleccionFin = null;
+
+// "YYYY-MM-DD HH:MM:SS" con la hora del dispositivo -- mismo formato que
+// usa el servidor (ahoraLocalTexto() en stock-calculado.js), para que la
+// fila optimista se vea y se ordene igual que las que ya vienen del
+// servidor mientras se espera la sincronización real de fondo.
+function ahoraLocalTextoCliente() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 
 function fechaISO(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1615,30 +1679,31 @@ document.getElementById('btn-guardar-merma').addEventListener('click', async () 
     if (!json.ok) throw new Error(json.error || 'Error desconocido');
     statusEl.textContent = `Merma registrada: ${cantidad} de "${item.nombre}".`;
     statusEl.className = 'status ok';
-    const jsonActualizado = await obtenerDatosStockCafeteria();
-    mermasCompletas = jsonActualizado.mermas || mermasCompletas;
-    mermasHoyActual = jsonActualizado.mermasHoy || [];
+
+    // Aparece DE INMEDIATO en el historial, sin esperar a que se recalcule
+    // todo contra Toteat -- si no, el operario piensa que no se guardó y
+    // la vuelve a ingresar (eso es lo que estaba duplicando mermas).
+    const mermaOptimista = {
+      tipo: item.tipo,
+      cantidad,
+      motivo,
+      fecha: ahoraLocalTextoCliente(),
+      nombreVisible: item.nombre,
+      ...(item.tipo === 'insumo' ? { insumo: item.insumo } : {}),
+      ...(item.tipo === 'producto' ? { producto: item.producto, codigoProducto: item.codigoProducto } : {}),
+      ...(item.tipo === 'producto-sabor' ? { producto: item.producto, patronToken: item.patronToken, codigoBase: item.codigoBase, patronCodigo: item.patronCodigo } : {}),
+    };
+    mermasHoyActual = [mermaOptimista, ...mermasHoyActual];
+    mermasCompletas = [mermaOptimista, ...mermasCompletas];
     renderLogMermas(mermasHoyActual);
     document.getElementById('historial-titulo').textContent = 'Historial de mermas de hoy';
     document.getElementById('btn-historial-hoy').style.display = 'none';
-    if (document.getElementById('calendario-panel').classList.contains('visible')) {
-      renderCalendarioMermas();
-    }
-    fetch('/.netlify/functions/cache-datos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tab: 'mermas',
-        datos: {
-          stockData,
-          itemsParaMerma,
-          mermasCompletas,
-          categoriaPorClaveMerma: [...categoriaPorClaveMerma.entries()],
-          mermasHoy: jsonActualizado.mermasHoy || [],
-        },
-      }),
-    }).catch(() => {});
     volverABuscarMerma();
+
+    // Recién ahora, de fondo (sin que el operario tenga que esperar), se
+    // recalcula todo de verdad contra Toteat y se reemplaza el dato
+    // optimista por el real -- y se guarda el cache en la nube.
+    sincronizarMermasDeFondo();
   } catch (e) {
     statusEl.textContent = 'Error: ' + e.message;
     statusEl.className = 'status err';
