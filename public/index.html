@@ -221,7 +221,10 @@
 <body>
 
 <header>
-  <h1>Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.3</span></h1>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <h1 style="margin:0;">Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.4</span></h1>
+    <button type="button" class="chico" id="btn-modo-admin">🔒 Admin</button>
+  </div>
   <div class="tabs">
     <button class="tab-btn" data-tab="pedido">Pedido de hoy</button>
     <button class="tab-btn" data-tab="fabricar">Por empezar a fabricar</button>
@@ -1038,19 +1041,116 @@ function renderStockCalculado() {
   });
 }
 
+let modoAdmin = false;
+let ultimaListaHistorialRenderizada = []; // permite ubicar el objeto original de cada fila al editar/eliminar
+
 function renderLogMermas(lista, opciones) {
   const { mostrarFecha = false, mensajeVacio = 'Sin mermas registradas hoy.' } = opciones || {};
   const cont = document.getElementById('log-mermas');
   if (!lista.length) {
     cont.innerHTML = `<div>${escapeAttr(mensajeVacio)}</div>`;
+    ultimaListaHistorialRenderizada = [];
     return;
   }
   const ordenada = [...lista].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
-  cont.innerHTML = ordenada.map((m) => {
+  ultimaListaHistorialRenderizada = ordenada;
+
+  cont.innerHTML = ordenada.map((m, i) => {
     const fechaHora = mostrarFecha ? `${(m.fecha || '').slice(0, 10)} ${(m.fecha || '').slice(11, 16)}` : (m.fecha || '').slice(11, 16);
     const nombre = m.nombreVisible || m.insumo || m.producto || '';
-    return `<div>${fechaHora} · ${escapeAttr(nombre)} · ${m.cantidad}${m.motivo ? ' · ' + escapeAttr(m.motivo) : ''}</div>`;
+    const controlesAdmin = modoAdmin ? `
+      <span style="float:right;">
+        <button type="button" class="chico" data-editar-merma="${i}">✏️</button>
+        <button type="button" class="chico" data-eliminar-merma="${i}">🗑️</button>
+      </span>` : '';
+    return `<div>${fechaHora} · ${escapeAttr(nombre)} · ${m.cantidad}${m.motivo ? ' · ' + escapeAttr(m.motivo) : ''}${controlesAdmin}</div>`;
   }).join('');
+
+  if (modoAdmin) {
+    cont.querySelectorAll('[data-editar-merma]').forEach((btn) => {
+      btn.addEventListener('click', () => editarMermaAdmin(ultimaListaHistorialRenderizada[Number(btn.dataset.editarMerma)]));
+    });
+    cont.querySelectorAll('[data-eliminar-merma]').forEach((btn) => {
+      btn.addEventListener('click', () => eliminarMermaAdmin(ultimaListaHistorialRenderizada[Number(btn.dataset.eliminarMerma)]));
+    });
+  }
+}
+
+document.getElementById('btn-modo-admin').addEventListener('click', () => {
+  if (modoAdmin) {
+    modoAdmin = false;
+    document.getElementById('btn-modo-admin').textContent = '🔒 Admin';
+    renderLogMermas(ultimaListaHistorialRenderizada);
+    return;
+  }
+  const clave = prompt('Clave de administrador:');
+  if (clave === null) return;
+  if (clave !== 'norai2026') {
+    alert('Clave incorrecta.');
+    return;
+  }
+  modoAdmin = true;
+  document.getElementById('btn-modo-admin').textContent = '🔓 Admin activo';
+  renderLogMermas(ultimaListaHistorialRenderizada);
+});
+
+async function editarMermaAdmin(original) {
+  const nueva = prompt(`Nueva cantidad para "${original.nombreVisible || original.insumo || original.producto}" (era ${original.cantidad}):`, original.cantidad);
+  if (nueva === null || !(Number(nueva) > 0)) return;
+  try {
+    const res = await fetch('/.netlify/functions/stock-cafeteria', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'editar-merma', original, nuevaCantidad: Number(nueva) }),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+    await refrescarHistorialTrasEdicionAdmin();
+  } catch (e) {
+    alert('No se pudo editar: ' + e.message);
+  }
+}
+
+async function eliminarMermaAdmin(original) {
+  if (!confirm(`¿Eliminar esta merma?\n\n${original.nombreVisible || original.insumo || original.producto} · ${original.cantidad}`)) return;
+  try {
+    const res = await fetch('/.netlify/functions/stock-cafeteria', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'eliminar-merma', original }),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+    await refrescarHistorialTrasEdicionAdmin();
+  } catch (e) {
+    alert('No se pudo eliminar: ' + e.message);
+  }
+}
+
+// Tras editar/eliminar, refresca desde el servidor y guarda el cache en la
+// nube de nuevo -- para que el cambio se vea también en el calendario, el
+// Excel, y en cualquier otro dispositivo.
+async function refrescarHistorialTrasEdicionAdmin() {
+  const jsonActualizado = await obtenerDatosStockCafeteria();
+  mermasCompletas = jsonActualizado.mermas || [];
+  mermasHoyActual = jsonActualizado.mermasHoy || [];
+  renderLogMermas(mermasHoyActual);
+  document.getElementById('historial-titulo').textContent = 'Historial de mermas de hoy';
+  document.getElementById('btn-historial-hoy').style.display = 'none';
+  fetch('/.netlify/functions/cache-datos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tab: 'mermas',
+      datos: {
+        stockData,
+        itemsParaMerma,
+        mermasCompletas,
+        categoriaPorClaveMerma: [...categoriaPorClaveMerma.entries()],
+        mermasHoy: mermasHoyActual,
+      },
+    }),
+  }).catch(() => {});
 }
 
 let mermasHoyActual = []; // para poder volver a "Ver hoy" después de buscar por calendario
