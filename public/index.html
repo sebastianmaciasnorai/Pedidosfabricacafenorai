@@ -222,7 +222,7 @@
 
 <header>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <h1 style="margin:0;">Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.4</span></h1>
+    <h1 style="margin:0;">Fábrica · Norai Café <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;color:var(--ink-soft);">v4.6</span></h1>
     <button type="button" class="chico" id="btn-modo-admin">🔒 Admin</button>
   </div>
   <div class="tabs">
@@ -382,15 +382,28 @@
     </div>
   </section>
 
-  <section style="margin-top:20px;">
+  <section style="margin-top:20px;position:relative;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;" id="historial-titulo">Historial de mermas de hoy</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" class="chico" id="btn-historial-hoy" style="display:none;">↺ Ver hoy</button>
+        <button type="button" class="chico" id="btn-ver-papelera" style="display:none;">🗑️ Papelera</button>
         <button class="add" id="btn-descargar-mermas">📥 Descargar historial completo (Excel)</button>
       </div>
     </div>
     <div class="log-mermas" id="log-mermas"></div>
+
+    <div id="panel-papelera" class="calendario-overlay">
+      <div class="calendario-flotante">
+        <div class="teclado-card-header">
+          <span>🗑️</span>
+          <span>Papelera de mermas</span>
+          <button type="button" id="btn-cerrar-papelera" title="Cerrar">✕</button>
+        </div>
+        <p class="hint">Mermas eliminadas -- puedes restaurarlas si fue un error. Solo las ve el modo admin.</p>
+        <div id="lista-papelera" style="max-height:50vh;overflow-y:auto;"></div>
+      </div>
+    </div>
   </section>
 </div>
 
@@ -840,9 +853,11 @@ function aplicarDatosMermas(datos) {
   mermasCompletas = datos.mermasCompletas || [];
   categoriaPorClaveMerma = new Map(datos.categoriaPorClaveMerma || []);
   mermasHoyActual = datos.mermasHoy || [];
+  mermasEliminadasActual = datos.mermasEliminadas || [];
 
   document.getElementById('seccion-mermas').style.display = 'block';
   document.getElementById('seccion-calendario-mermas').style.display = 'block';
+  document.getElementById('btn-ver-papelera').style.display = modoAdmin ? 'inline-block' : 'none';
   renderLogMermas(mermasHoyActual);
 
   // Si el calendario ya estaba abierto (dato viejo en pantalla), lo vuelve
@@ -872,6 +887,7 @@ async function cargarMermas() {
         mermasCompletas,
         categoriaPorClaveMerma: [...categoriaPorClaveMerma.entries()],
         mermasHoy: json.mermasHoy || [],
+        mermasEliminadas: json.mermasEliminadas || [],
       };
     },
     aplicarDatos: aplicarDatosMermas,
@@ -976,7 +992,7 @@ document.getElementById('btn-descargar-mermas').addEventListener('click', async 
     const res = await fetch('/.netlify/functions/stock-cafeteria');
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'Error desconocido');
-    const mermas = json.mermas || [];
+    const mermas = (json.mermas || []).filter((m) => !m.eliminada);
     if (!mermas.length) {
       alert('No hay mermas registradas todavía para exportar.');
       return;
@@ -1080,6 +1096,8 @@ document.getElementById('btn-modo-admin').addEventListener('click', () => {
   if (modoAdmin) {
     modoAdmin = false;
     document.getElementById('btn-modo-admin').textContent = '🔒 Admin';
+    document.getElementById('btn-ver-papelera').style.display = 'none';
+    document.getElementById('panel-papelera').classList.remove('visible');
     renderLogMermas(ultimaListaHistorialRenderizada);
     return;
   }
@@ -1091,8 +1109,55 @@ document.getElementById('btn-modo-admin').addEventListener('click', () => {
   }
   modoAdmin = true;
   document.getElementById('btn-modo-admin').textContent = '🔓 Admin activo';
+  document.getElementById('btn-ver-papelera').style.display = document.getElementById('seccion-mermas').style.display !== 'none' ? 'inline-block' : 'none';
   renderLogMermas(ultimaListaHistorialRenderizada);
 });
+
+document.getElementById('btn-ver-papelera').addEventListener('click', () => {
+  document.getElementById('panel-papelera').classList.add('visible');
+  renderPapelera();
+});
+document.getElementById('btn-cerrar-papelera').addEventListener('click', () => {
+  document.getElementById('panel-papelera').classList.remove('visible');
+});
+// Mismo patrón que el calendario: cierra solo si se toca el fondo oscurecido.
+document.getElementById('panel-papelera').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
+});
+
+function renderPapelera() {
+  const cont = document.getElementById('lista-papelera');
+  if (!mermasEliminadasActual.length) {
+    cont.innerHTML = '<p class="hint">La papelera está vacía.</p>';
+    return;
+  }
+  cont.innerHTML = mermasEliminadasActual.map((m, i) => {
+    const nombre = m.nombreVisible || m.insumo || m.producto || '';
+    const fechaHora = `${(m.fecha || '').slice(0, 10)} ${(m.fecha || '').slice(11, 16)}`;
+    return `<div style="padding:8px 0;border-bottom:1px dashed var(--line);">
+      ${fechaHora} · ${escapeAttr(nombre)} · ${m.cantidad}${m.motivo ? ' · ' + escapeAttr(m.motivo) : ''}
+      <button type="button" class="chico" style="float:right;" data-restaurar="${i}">↺ Restaurar</button>
+    </div>`;
+  }).join('');
+  cont.querySelectorAll('[data-restaurar]').forEach((btn) => {
+    btn.addEventListener('click', () => restaurarMermaAdmin(mermasEliminadasActual[Number(btn.dataset.restaurar)]));
+  });
+}
+
+async function restaurarMermaAdmin(original) {
+  try {
+    const res = await fetch('/.netlify/functions/stock-cafeteria', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'restaurar-merma', original }),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+    await refrescarHistorialTrasEdicionAdmin();
+  } catch (e) {
+    alert('No se pudo restaurar: ' + e.message);
+  }
+}
 
 async function editarMermaAdmin(original) {
   const nueva = prompt(`Nueva cantidad para "${original.nombreVisible || original.insumo || original.producto}" (era ${original.cantidad}):`, original.cantidad);
@@ -1134,7 +1199,9 @@ async function refrescarHistorialTrasEdicionAdmin() {
   const jsonActualizado = await obtenerDatosStockCafeteria();
   mermasCompletas = jsonActualizado.mermas || [];
   mermasHoyActual = jsonActualizado.mermasHoy || [];
+  mermasEliminadasActual = jsonActualizado.mermasEliminadas || [];
   renderLogMermas(mermasHoyActual);
+  renderPapelera();
   document.getElementById('historial-titulo').textContent = 'Historial de mermas de hoy';
   document.getElementById('btn-historial-hoy').style.display = 'none';
   fetch('/.netlify/functions/cache-datos', {
@@ -1148,12 +1215,14 @@ async function refrescarHistorialTrasEdicionAdmin() {
         mermasCompletas,
         categoriaPorClaveMerma: [...categoriaPorClaveMerma.entries()],
         mermasHoy: mermasHoyActual,
+        mermasEliminadas: mermasEliminadasActual,
       },
     }),
   }).catch(() => {});
 }
 
 let mermasHoyActual = []; // para poder volver a "Ver hoy" después de buscar por calendario
+let mermasEliminadasActual = []; // papelera -- solo visible en modo admin
 
 // ===================== CALENDARIO DE MERMAS =====================
 const MESES_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
